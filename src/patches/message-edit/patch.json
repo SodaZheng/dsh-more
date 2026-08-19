@@ -1,0 +1,12 @@
+{
+  "id": "message-edit",
+  "name": "编辑并重新开始",
+  "description": "编辑用户消息并丢弃该消息之后的历史",
+  "defaultEnabled": true,
+  "order": 100,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "message-action",
+    "entry": "./client/index.tsx"
+  }
+}

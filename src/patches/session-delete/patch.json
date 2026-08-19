@@ -1,0 +1,12 @@
+{
+  "id": "session-delete",
+  "name": "永久删除会话",
+  "description": "停止目标会话并从磁盘永久删除，不影响原生归档",
+  "defaultEnabled": true,
+  "order": 300,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.tsx"
+  }
+}

@@ -1,0 +1,4 @@
+# Installed automatically as a DSH bundle layer.
+- insert:
+    - id: dsh-more
+      name: dsh-more

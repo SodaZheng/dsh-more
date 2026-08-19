@@ -1,0 +1,12 @@
+{
+  "id": "message-delete",
+  "name": "单条消息删除",
+  "description": "删除指定消息并保留前后历史记录",
+  "defaultEnabled": true,
+  "order": 200,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "message-action",
+    "entry": "./client/index.tsx"
+  }
+}
