@@ -1,0 +1,12 @@
+{
+  "id": "conversation-markdown-export",
+  "name": "导出完整聊天记录",
+  "description": "将当前会话的完整聊天记录下载为 Markdown 文件",
+  "defaultEnabled": true,
+  "order": 400,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.tsx"
+  }
+}
