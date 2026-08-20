@@ -1,10 +1,20 @@
 {
   "name": "dsh-more",
   "description": "Practical patches for missing DSH Web context and history controls",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "entry": {
     "name": "dsh-more",
-    "inject": ["webServer", "webRuntime", "agents", "sessions", "sessionPersistence", "sessionProjections", "workspaceRegistry", "agentPresets", "settings"]
+    "inject": [
+      "webServer",
+      "webRuntime",
+      "agents",
+      "sessions",
+      "sessionPersistence",
+      "sessionProjections",
+      "workspaceRegistry",
+      "agentPresets",
+      "settings"
+    ]
   },
   "client": {
     "platform": "web"

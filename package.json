@@ -1,6 +1,6 @@
 {
   "name": "dsh-more",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Practical patches for missing DeepSeek Harness Web context and history controls.",
   "type": "module",
   "license": "MIT",
@@ -80,7 +80,7 @@
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major",
-    "version": "node scripts/sync-plugin-version.mjs",
+    "version": "node scripts/sync-plugin-version.mjs && git add -- dsh.plugin.json",
     "prepack": "npm run check"
   },
   "peerDependencies": {
