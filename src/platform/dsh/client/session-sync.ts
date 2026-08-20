@@ -114,8 +114,14 @@ export function adjacentVisibleSession(
 ): SessionId | undefined {
   if (sessions.current !== deletingSessionId) return undefined
   const archived = new Set(workspaces.archivedSessionIds)
-  const visible = sessions.ids.filter((id) => id !== deletingSessionId && !archived.has(id))
-  if (visible.length === 0) return undefined
   const deletingIndex = sessions.ids.indexOf(deletingSessionId)
-  return visible.find((id) => sessions.ids.indexOf(id) > deletingIndex) ?? visible.at(-1)
+  for (let index = deletingIndex + 1; index < sessions.ids.length; index += 1) {
+    const id = sessions.ids[index]
+    if (id !== undefined && id !== deletingSessionId && !archived.has(id)) return id
+  }
+  for (let index = deletingIndex - 1; index >= 0; index -= 1) {
+    const id = sessions.ids[index]
+    if (id !== undefined && id !== deletingSessionId && !archived.has(id)) return id
+  }
+  return undefined
 }

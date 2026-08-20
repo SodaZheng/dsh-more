@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { DshMoreError } from '../../src/platform/dsh/host/error.js'
 import {
+  RawPatchResponse,
   readJson,
   requireJsonContentType,
   writeError,
+  writeOk,
 } from '../../src/platform/dsh/host/wire.js'
 
 function request(body: string, contentType = 'application/json'): IncomingMessage {
@@ -18,14 +20,27 @@ function response(): {
   res: ServerResponse
   status: () => number | undefined
   body: () => unknown
+  headers: () => Record<string, string> | undefined
 } {
   let status: number | undefined
   let body: unknown
+  let headers: Record<string, string> | undefined
   const res = {
-    writeHead: (nextStatus: number) => { status = nextStatus; return res },
-    end: (value: string) => { body = JSON.parse(value) as unknown; return res },
+    writeHead: (nextStatus: number, nextHeaders?: Record<string, string>) => {
+      status = nextStatus
+      headers = nextHeaders
+      return res
+    },
+    end: (value: string) => {
+      try {
+        body = JSON.parse(value) as unknown
+      } catch {
+        body = value
+      }
+      return res
+    },
   } as unknown as ServerResponse
-  return { res, status: () => status, body: () => body }
+  return { res, status: () => status, body: () => body, headers: () => headers }
 }
 
 describe('patch API wire boundary', () => {
@@ -61,5 +76,13 @@ describe('patch API wire boundary', () => {
       ok: false,
       error: { code: 'session-busy', message: '会话仍在运行。' },
     })
+  })
+
+  it('passes a large raw success body without JSON serialization', () => {
+    const target = response()
+    writeOk(target.res, new RawPatchResponse('# transcript\n', 'text/markdown; charset=utf-8'))
+    expect(target.status()).toBe(200)
+    expect(target.headers()?.['content-type']).toBe('text/markdown; charset=utf-8')
+    expect(target.body()).toBe('# transcript\n')
   })
 })

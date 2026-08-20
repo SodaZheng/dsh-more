@@ -7,6 +7,7 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
+import { RawPatchResponse } from '../../platform/dsh/host/wire.js'
 import { markdownFilename } from './client/filename.js'
 import { hostPatch } from './host/index.js'
 import { conversationMarkdown } from './host/transcript.js'
@@ -95,5 +96,36 @@ describe('conversation Markdown export', () => {
     if (render === undefined) throw new Error('missing render route')
     expect(() => render({})).toThrow('sessionId')
     expect(() => render({ sessionId: 'session-1', title: 'x'.repeat(501) })).toThrow('会话标题过长')
+  })
+
+  it('handles a backtick-dense tool payload without argument-spread overflow', () => {
+    const dense = '`x'.repeat(150_000)
+    const event = {
+      type: 'tool/call',
+      seq: 0,
+      time: 0,
+      data: { turn: 1, step: 1, callId: CallId('call-dense'), name: 'dense', arguments: dense },
+    } as const
+    const result = conversationMarkdown([event], {
+      title: 'dense',
+      sessionId: 'session-dense',
+      exportedAt: 0,
+    })
+    expect(result.entryCount).toBe(1)
+    expect(result.markdown).toContain(dense)
+  })
+
+  it('returns Markdown through the raw response path instead of a JSON envelope', () => {
+    const session = Session.create(SessionId('session-raw-export'))
+    const ctx = {
+      sessions: { get: () => session },
+      agents: { get: () => ({ session, status: 'idle' }) },
+    } as unknown as Context
+    const render = hostPatch.routes({ ctx, confirmationSecret: new Uint8Array() }).render
+    if (render === undefined) throw new Error('missing render route')
+    const result = render({ sessionId: session.id, title: 'raw' })
+    expect(result).toBeInstanceOf(RawPatchResponse)
+    expect((result as RawPatchResponse).contentType).toBe('text/markdown; charset=utf-8')
+    expect((result as RawPatchResponse).body).toContain('# raw')
   })
 })

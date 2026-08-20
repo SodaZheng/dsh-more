@@ -125,4 +125,20 @@ describe('incremental client session synchronization', () => {
     expect(adjacentVisibleSession(sessions, workspaces, sourceId)).toBe(childId)
     expect(adjacentVisibleSession({ ...sessions, current: childId }, workspaces, sourceId)).toBeUndefined()
   })
+
+  it('finds a fallback with one index lookup even at the end of a large list', () => {
+    const ids = Array.from({ length: 20_000 }, (_, index) => `session-${String(index)}` as SessionId)
+    const deletingId = ids.at(-1) as SessionId
+    let indexLookups = 0
+    const originalIndexOf = ids.indexOf.bind(ids)
+    ids.indexOf = ((searchElement: SessionId, fromIndex?: number) => {
+      indexLookups += 1
+      return originalIndexOf(searchElement, fromIndex)
+    }) as typeof ids.indexOf
+    const sessions = sessionState(ids, deletingId)
+    const workspaces = workspaceState(ids)
+
+    expect(adjacentVisibleSession(sessions, workspaces, deletingId)).toBe(ids.at(-2))
+    expect(indexLookups).toBe(1)
+  })
 })

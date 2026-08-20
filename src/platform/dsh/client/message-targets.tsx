@@ -1,6 +1,23 @@
-import { useLayoutEffect, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { contentText } from './message-content.js'
 import type { ConversationHeaderProps, MessageTarget } from '../../../kernel/client/message-actions.js'
+
+export interface MessageSurfaceRow {
+  key: string
+  presentationSeq: number | undefined
+  action: Omit<MessageTarget, 'key' | 'host'> | null
+}
+
+export interface MessageSurfaceSnapshot {
+  rows: readonly MessageSurfaceRow[]
+  byKey: ReadonlyMap<string, MessageSurfaceRow>
+}
+
+const EMPTY_MESSAGE_SURFACE: MessageSurfaceSnapshot = {
+  rows: [],
+  byKey: new Map(),
+}
 
 function messageNodeInfo(node: unknown): Omit<MessageTarget, 'key' | 'host'> | null {
   const candidate = node as {
@@ -43,6 +60,48 @@ function presentationSeq(node: unknown): number | undefined {
   const closing = candidate?.data?.closing as { finalNode?: { seq?: unknown } } | undefined
   if (Number.isSafeInteger(closing?.finalNode?.seq)) return closing?.finalNode?.seq as number
   return undefined
+}
+
+function sameSurfaceRow(left: MessageSurfaceRow | undefined, right: MessageSurfaceRow): boolean {
+  return left !== undefined
+    && left.key === right.key
+    && left.presentationSeq === right.presentationSeq
+    && left.action?.seq === right.action?.seq
+    && left.action?.kind === right.action?.kind
+    && left.action?.text === right.action?.text
+}
+
+/** Select only facts used by message actions, retaining identity across unrelated stream frames. */
+export function createMessageSurfaceSelector(active = true): (snapshot: ConversationSnapshot) => MessageSurfaceSnapshot {
+  if (!active) return () => EMPTY_MESSAGE_SURFACE
+  const nodeCache = new WeakMap<object, MessageSurfaceRow>()
+  let previous = EMPTY_MESSAGE_SURFACE
+  let previousOrder: readonly string[] | undefined
+
+  return (snapshot) => {
+    // DSH retains chat.order identity for content-only streaming publications.
+    if (snapshot.chat.order === previousOrder) return previous
+    previousOrder = snapshot.chat.order
+    const rows: MessageSurfaceRow[] = []
+    for (const key of snapshot.chat.order) {
+      const node = snapshot.chat.nodes.get(key)
+      if (node === undefined) continue
+      let row = nodeCache.get(node)
+      if (row === undefined) {
+        row = {
+          key,
+          presentationSeq: presentationSeq(node),
+          action: messageNodeInfo(node),
+        }
+        nodeCache.set(node, row)
+      }
+      const retained = previous.byKey.get(key)
+      rows.push(sameSurfaceRow(retained, row) ? retained as MessageSurfaceRow : row)
+    }
+    if (rows.length === previous.rows.length && rows.every((row, index) => row === previous.rows[index])) return previous
+    previous = { rows, byKey: new Map(rows.map((row) => [row.key, row])) }
+    return previous
+  }
 }
 
 function hostForRow(row: HTMLElement, kind: MessageTarget['kind']): HTMLElement {
@@ -89,15 +148,16 @@ function hostForRow(row: HTMLElement, kind: MessageTarget['kind']): HTMLElement 
   return host
 }
 
+function sameTarget(left: MessageTarget, right: MessageTarget | undefined): boolean {
+  return right !== undefined
+    && left.key === right.key
+    && left.seq === right.seq
+    && left.host === right.host
+    && left.text === right.text
+}
+
 function sameTargets(left: readonly MessageTarget[], right: readonly MessageTarget[]): boolean {
-  return left.length === right.length && left.every((target, index) => {
-    const other = right[index]
-    return other !== undefined
-      && target.key === other.key
-      && target.seq === other.seq
-      && target.host === other.host
-      && target.text === other.text
-  })
+  return left.length === right.length && left.every((target, index) => sameTarget(target, right[index]))
 }
 
 function trajectoryRecordKey(row: HTMLElement): string | undefined {
@@ -125,57 +185,149 @@ export function useMessageTargets(
   props: ConversationHeaderProps,
   hiddenSeqs: ReadonlySet<number>,
   hiddenTrajectoryKeys: ReadonlySet<string>,
+  active = true,
 ): readonly MessageTarget[] {
-  const snapshot = props.useSession((state) => state)
+  const selector = useMemo(() => createMessageSurfaceSelector(active), [active, props.sessionId])
+  const surface = props.useSession(selector)
+  const surfaceRef = useRef(surface)
+  const hiddenSeqsRef = useRef(hiddenSeqs)
+  const hiddenTrajectoryKeysRef = useRef(hiddenTrajectoryKeys)
+  surfaceRef.current = surface
+  hiddenSeqsRef.current = hiddenSeqs
+  hiddenTrajectoryKeysRef.current = hiddenTrajectoryKeys
   const [targets, setTargets] = useState<readonly MessageTarget[]>([])
+  const requestFullScanRef = useRef<(() => void) | null>(null)
 
   useLayoutEffect(() => {
+    if (!active) {
+      setTargets((current) => current.length === 0 ? current : [])
+      return
+    }
     let frame: number | null = null
-    const scan = (): void => {
-      frame = null
-      const next: MessageTarget[] = []
-      for (const row of document.querySelectorAll<HTMLElement>('[data-chat-flow-key]')) {
-        const key = row.dataset.chatFlowKey
-        if (key === undefined) continue
-        const node = snapshot.chat.nodes.get(key)
-        const seq = presentationSeq(node)
-        if (seq !== undefined && hiddenSeqs.has(seq)) {
-          row.dataset.dshmoreHidden = ''
-          row.querySelector<HTMLElement>('[data-dshmore-message-actions]')?.remove()
-          continue
-        }
-        if (row.dataset.dshmoreHidden !== undefined) {
-          delete row.dataset.dshmoreHidden
-        }
-        const info = messageNodeInfo(node)
-        if (info !== null) next.push({ key, ...info, host: hostForRow(row, info.kind) })
+    let fullScanRequested = true
+    let pruneDisconnected = false
+    let targetsDirty = false
+    const pendingChatRows = new Set<HTMLElement>()
+    const pendingTrajectoryRows = new Set<HTMLElement>()
+    const mountedTargets = new Map<string, MessageTarget>()
+
+    const processChatRow = (row: HTMLElement): void => {
+      const key = row.dataset.chatFlowKey
+      if (key === undefined) return
+      const descriptor = surfaceRef.current.byKey.get(key)
+      if (descriptor === undefined) {
+        if (mountedTargets.delete(key)) targetsDirty = true
+        row.querySelector<HTMLElement>('[data-dshmore-message-actions]')?.remove()
+        return
       }
-      for (const row of document.querySelectorAll<HTMLElement>('[data-trajectory-row-key]')) {
-        const seq = trajectorySourceSeq(row)
-        const key = trajectoryRecordKey(row)
-        if ((seq !== undefined && hiddenSeqs.has(seq)) || (key !== undefined && hiddenTrajectoryKeys.has(key))) {
-          row.dataset.dshmoreHidden = ''
-        } else if (row.dataset.dshmoreHidden !== undefined) {
-          delete row.dataset.dshmoreHidden
-        }
+      if (descriptor.presentationSeq !== undefined && hiddenSeqsRef.current.has(descriptor.presentationSeq)) {
+        row.dataset.dshmoreHidden = ''
+        if (mountedTargets.delete(key)) targetsDirty = true
+        row.querySelector<HTMLElement>('[data-dshmore-message-actions]')?.remove()
+        return
       }
+      if (row.dataset.dshmoreHidden !== undefined) delete row.dataset.dshmoreHidden
+      if (descriptor.action === null) {
+        if (mountedTargets.delete(key)) targetsDirty = true
+        row.querySelector<HTMLElement>('[data-dshmore-message-actions]')?.remove()
+        return
+      }
+      const next = {
+        key,
+        ...descriptor.action,
+        host: hostForRow(row, descriptor.action.kind),
+      }
+      const current = mountedTargets.get(key)
+      if (current === undefined || !sameTarget(current, next)) {
+        mountedTargets.set(key, next)
+        targetsDirty = true
+      }
+    }
+
+    const processTrajectoryRow = (row: HTMLElement): void => {
+      const seq = trajectorySourceSeq(row)
+      const key = trajectoryRecordKey(row)
+      if ((seq !== undefined && hiddenSeqsRef.current.has(seq)) || (key !== undefined && hiddenTrajectoryKeysRef.current.has(key))) {
+        row.dataset.dshmoreHidden = ''
+      } else if (row.dataset.dshmoreHidden !== undefined) {
+        delete row.dataset.dshmoreHidden
+      }
+    }
+
+    const publishTargets = (): void => {
+      for (const [key, target] of mountedTargets) {
+        if (!target.host.isConnected && mountedTargets.delete(key)) targetsDirty = true
+      }
+      const next = surfaceRef.current.rows.flatMap((row) => {
+        const target = mountedTargets.get(row.key)
+        return target === undefined ? [] : [target]
+      })
       setTargets((current) => sameTargets(current, next) ? current : next)
+      targetsDirty = false
     }
+
+    const flush = (): void => {
+      frame = null
+      if (fullScanRequested) {
+        fullScanRequested = false
+        mountedTargets.clear()
+        targetsDirty = true
+        for (const row of document.querySelectorAll<HTMLElement>('[data-chat-flow-key]')) processChatRow(row)
+        for (const row of document.querySelectorAll<HTMLElement>('[data-trajectory-row-key]')) processTrajectoryRow(row)
+      } else {
+        for (const row of pendingChatRows) if (row.isConnected) processChatRow(row)
+        for (const row of pendingTrajectoryRows) if (row.isConnected) processTrajectoryRow(row)
+      }
+      pendingChatRows.clear()
+      pendingTrajectoryRows.clear()
+      const shouldPrune = pruneDisconnected
+      pruneDisconnected = false
+      if (targetsDirty || shouldPrune) publishTargets()
+    }
+
     const schedule = (): void => {
-      if (frame === null) frame = window.requestAnimationFrame(scan)
+      if (frame === null) frame = window.requestAnimationFrame(flush)
     }
-    scan()
-    const observer = new MutationObserver(schedule)
+    const requestFullScan = (): void => {
+      fullScanRequested = true
+      schedule()
+    }
+    const collectRows = (node: Node): void => {
+      const element = node instanceof Element ? node : node.parentElement
+      if (element === null) return
+      const chatAncestor = element.closest<HTMLElement>('[data-chat-flow-key]')
+      if (chatAncestor !== null) pendingChatRows.add(chatAncestor)
+      const trajectoryAncestor = element.closest<HTMLElement>('[data-trajectory-row-key]')
+      if (trajectoryAncestor !== null) pendingTrajectoryRows.add(trajectoryAncestor)
+      if (element.matches('[data-chat-flow-key]')) pendingChatRows.add(element as HTMLElement)
+      if (element.matches('[data-trajectory-row-key]')) pendingTrajectoryRows.add(element as HTMLElement)
+      element.querySelectorAll<HTMLElement>('[data-chat-flow-key]').forEach((row) => pendingChatRows.add(row))
+      element.querySelectorAll<HTMLElement>('[data-trajectory-row-key]').forEach((row) => pendingTrajectoryRows.add(row))
+    }
+    requestFullScanRef.current = requestFullScan
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.removedNodes.length > 0) pruneDisconnected = true
+        record.addedNodes.forEach(collectRows)
+      }
+      if (pendingChatRows.size > 0 || pendingTrajectoryRows.size > 0 || pruneDisconnected) schedule()
+    })
     observer.observe(document.body, { childList: true, subtree: true })
+    flush()
     return () => {
       observer.disconnect()
       if (frame !== null) window.cancelAnimationFrame(frame)
+      requestFullScanRef.current = null
       for (const row of document.querySelectorAll<HTMLElement>('[data-dshmore-hidden]')) {
         delete row.dataset.dshmoreHidden
       }
       for (const host of document.querySelectorAll<HTMLElement>('[data-dshmore-message-actions]')) host.remove()
     }
-  }, [snapshot, hiddenSeqs, hiddenTrajectoryKeys])
+  }, [active])
+
+  useLayoutEffect(() => {
+    requestFullScanRef.current?.()
+  }, [surface, hiddenSeqs, hiddenTrajectoryKeys])
 
   return targets
 }

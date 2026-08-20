@@ -18,7 +18,16 @@ function isoTime(value: number): string {
 }
 
 function codeFence(value: string, language = ''): string {
-  const longest = Math.max(0, ...[...value.matchAll(/`+/g)].map((match) => match[0].length))
+  let longest = 0
+  let current = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) === 96) {
+      current += 1
+      if (current > longest) longest = current
+    } else {
+      current = 0
+    }
+  }
   const fence = '`'.repeat(Math.max(3, longest + 1))
   return `${fence}${language}\n${value}\n${fence}`
 }
@@ -62,7 +71,12 @@ function contentBlockMarkdown(block: ContentBlock): string {
 
 function contentMarkdown(content: readonly ContentBlock[]): string {
   if (content.length === 0) return '（空消息）'
-  return content.map(contentBlockMarkdown).filter((part) => part !== '').join('\n\n') || '（空消息）'
+  const parts: string[] = []
+  for (const block of content) {
+    const part = contentBlockMarkdown(block)
+    if (part !== '') parts.push(part)
+  }
+  return parts.join('\n\n') || '（空消息）'
 }
 
 function messageSection(label: string, time: number, body: string): string {
@@ -74,12 +88,6 @@ function sourceLabel(event: Extract<SessionEvent, { type: 'user/message' }>): st
   if (source.kind === 'user') return '用户'
   if (source.kind === 'plugin') return `上下文 · ${singleLine(source.plugin) || '插件'}`
   return '上下文'
-}
-
-function toolCallIds(content: readonly ContentBlock[]): string[] {
-  return content
-    .filter((block): block is Extract<ContentBlock, { type: 'tool-call' }> => block.type === 'tool-call')
-    .map((block) => String(block.id))
 }
 
 /** Convert one immutable Session event snapshot into a complete Markdown transcript. */
@@ -97,7 +105,9 @@ export function conversationMarkdown(
       continue
     }
     if (event.type === 'assistant/message') {
-      for (const callId of toolCallIds(event.data.message.content)) renderedCalls.add(callId)
+      for (const block of event.data.message.content) {
+        if (block.type === 'tool-call') renderedCalls.add(String(block.id))
+      }
       sections.push(messageSection('助手', event.time, contentMarkdown(event.data.message.content)))
       continue
     }

@@ -23,6 +23,7 @@ type OverlayProps = PropsRuntime<'shell.overlay'>
 
 interface PendingSessionDelete {
   sessionId: SessionId
+  title: string
   resolve: () => void
 }
 
@@ -44,46 +45,73 @@ function replaceExactText(root: Element, before: string, after: string): void {
 /** Add a separate permanent-delete row beside the native archive row. */
 export function installSessionDeleteMenuItems(onDelete: (archiveButton: HTMLButtonElement) => void): () => void {
   let frame: number | null = null
-  const deleteItems = new WeakMap<HTMLButtonElement, HTMLElement>()
-  const sync = (): void => {
-    for (const archiveButton of document.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')) {
-      const text = archiveButton.textContent?.trim()
-      const deleteLabel = text === '归档会话'
-        ? '永久删除会话'
-        : text === 'Archive session' ? 'Permanently delete session' : undefined
-      if (deleteLabel === undefined) continue
-      const wrapper = archiveButton.parentElement
-      if (wrapper === null) continue
-      if (archiveButton.hasAttribute(DELETE_SOURCE_ATTRIBUTE)) {
-        if (deleteItems.get(archiveButton)?.isConnected === true) continue
-        archiveButton.removeAttribute(DELETE_SOURCE_ATTRIBUTE)
-      }
-      const clone = wrapper.cloneNode(true) as HTMLElement
-      const deleteButton = clone.querySelector<HTMLButtonElement>('button[role="menuitem"]')
-      if (deleteButton === null) continue
-      archiveButton.setAttribute(DELETE_SOURCE_ATTRIBUTE, '')
-      clone.setAttribute(DELETE_MENU_ATTRIBUTE, '')
-      deleteItems.set(archiveButton, clone)
-      replaceExactText(deleteButton, text, deleteLabel)
-      deleteButton.setAttribute('aria-label', deleteLabel)
-      deleteButton.classList.add('dshmore-session-delete-menu-item')
-      deleteButton.addEventListener('click', (event) => {
-        event.preventDefault()
-        event.stopImmediatePropagation()
-        onDelete(archiveButton)
-      })
-      wrapper.after(clone)
+  const deleteItems = new Map<HTMLButtonElement, HTMLElement>()
+  const pendingButtons = new Set<HTMLButtonElement>()
+  const syncButton = (archiveButton: HTMLButtonElement): void => {
+    if (!archiveButton.isConnected) return
+    const text = archiveButton.textContent?.trim()
+    const deleteLabel = text === '归档会话'
+      ? '永久删除会话'
+      : text === 'Archive session' ? 'Permanently delete session' : undefined
+    if (deleteLabel === undefined) return
+    const wrapper = archiveButton.parentElement
+    if (wrapper === null) return
+    if (archiveButton.hasAttribute(DELETE_SOURCE_ATTRIBUTE)) {
+      if (deleteItems.get(archiveButton)?.isConnected === true) return
+      archiveButton.removeAttribute(DELETE_SOURCE_ATTRIBUTE)
     }
+    const clone = wrapper.cloneNode(true) as HTMLElement
+    const deleteButton = clone.querySelector<HTMLButtonElement>('button[role="menuitem"]')
+    if (deleteButton === null) return
+    archiveButton.setAttribute(DELETE_SOURCE_ATTRIBUTE, '')
+    clone.setAttribute(DELETE_MENU_ATTRIBUTE, '')
+    deleteItems.set(archiveButton, clone)
+    replaceExactText(deleteButton, text, deleteLabel)
+    deleteButton.setAttribute('aria-label', deleteLabel)
+    deleteButton.classList.add('dshmore-session-delete-menu-item')
+    deleteButton.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onDelete(archiveButton)
+    })
+    wrapper.after(clone)
+  }
+  const collectButtons = (node: Node): void => {
+    const element = node instanceof Element ? node : node.parentElement
+    if (element === null) return
+    const ancestor = element.closest<HTMLButtonElement>('button[role="menuitem"]')
+    if (ancestor !== null) pendingButtons.add(ancestor)
+    if (element.matches('button[role="menuitem"]')) pendingButtons.add(element as HTMLButtonElement)
+    element.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]').forEach((button) => pendingButtons.add(button))
+  }
+  const flush = (): void => {
+    frame = null
+    for (const [archiveButton, deleteItem] of deleteItems) {
+      if (!archiveButton.isConnected) {
+        deleteItems.delete(archiveButton)
+      } else if (!deleteItem.isConnected) {
+        archiveButton.removeAttribute(DELETE_SOURCE_ATTRIBUTE)
+        deleteItems.delete(archiveButton)
+        pendingButtons.add(archiveButton)
+      }
+    }
+    for (const button of pendingButtons) syncButton(button)
+    pendingButtons.clear()
   }
   const schedule = (): void => {
     if (frame !== null) return
-    frame = window.requestAnimationFrame(() => {
-      frame = null
-      sync()
-    })
+    frame = window.requestAnimationFrame(flush)
   }
-  sync()
-  const observer = new MutationObserver(schedule)
+  document.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]').forEach((button) => pendingButtons.add(button))
+  flush()
+  const observer = new MutationObserver((records) => {
+    let removedKnownItem = false
+    for (const record of records) {
+      record.addedNodes.forEach(collectButtons)
+      if (record.removedNodes.length > 0 && deleteItems.size > 0) removedKnownItem = true
+    }
+    if (pendingButtons.size > 0 || removedKnownItem) schedule()
+  })
   observer.observe(document.body, { childList: true, subtree: true })
   return () => {
     observer.disconnect()
@@ -99,12 +127,6 @@ function SessionDeleteController(props: OverlayProps & {
 }): JSX.Element | null {
   const settings = useSyncExternalStore(props.activation.subscribe, props.activation.getSnapshot)
   const enabled = settings[SESSION_DELETE_PATCH_ID]
-  const sessionList = props.useSessions((state) => state)
-  const sessionListRef = useRef(sessionList)
-  sessionListRef.current = sessionList
-  const workspaceList = props.useWorkspaces((state) => state)
-  const workspaceListRef = useRef(workspaceList)
-  workspaceListRef.current = workspaceList
   const [pending, setPending] = useState<PendingSessionDelete | null>(null)
   const pendingRef = useRef<PendingSessionDelete | null>(null)
   const deleteIntentRef = useRef(false)
@@ -114,13 +136,18 @@ function SessionDeleteController(props: OverlayProps & {
   useEffect(() => {
     if (!enabled) return
     const workspaces = (props.ctx as unknown as { workspaces: RefreshableWorkspaces }).workspaces
+    const sessions = (props.ctx as unknown as { sessions: RefreshableSessions }).sessions
     const mutable = workspaces as unknown as { archiveSession: (sessionId: SessionId) => Promise<void> }
     const original = mutable.archiveSession
     mutable.archiveSession = (sessionId) => {
       if (!deleteIntentRef.current) return original.call(mutable, sessionId)
       deleteIntentRef.current = false
       return new Promise<void>((resolve) => {
-        const request = { sessionId, resolve }
+        const request = {
+          sessionId,
+          title: sessions.list.getSnapshot().byId[sessionId]?.displayTitle ?? String(sessionId),
+          resolve,
+        }
         pendingRef.current?.resolve()
         pendingRef.current = request
         setError(null)
@@ -156,8 +183,8 @@ function SessionDeleteController(props: OverlayProps & {
     const sessions = (props.ctx as unknown as { sessions: RefreshableSessions }).sessions
     const workspaces = (props.ctx as unknown as { workspaces: RefreshableWorkspaces }).workspaces
     const fallbackSessionId = adjacentVisibleSession(
-      sessionListRef.current,
-      workspaceListRef.current,
+      sessions.list.getSnapshot(),
+      workspaces.list.getSnapshot(),
       pending.sessionId,
     )
     if (fallbackSessionId !== undefined) openSessionWithoutGap(sessions, fallbackSessionId)
@@ -177,7 +204,7 @@ function SessionDeleteController(props: OverlayProps & {
     }
   }
 
-  const title = pending === null ? '' : sessionListRef.current.byId[pending.sessionId]?.displayTitle ?? pending.sessionId
+  const title = pending?.title ?? ''
   if (!enabled) return null
   return (
     <>

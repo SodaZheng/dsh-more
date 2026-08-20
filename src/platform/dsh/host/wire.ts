@@ -3,6 +3,14 @@ import { DshMoreError } from './error.js'
 
 const MAX_BODY_BYTES = 64 * 1024
 
+/** Successful non-JSON payload that should pass through without serialization. */
+export class RawPatchResponse {
+  constructor(
+    readonly body: string,
+    readonly contentType: string,
+  ) {}
+}
+
 export function requireJsonContentType(req: IncomingMessage): void {
   const value = req.headers['content-type']
   const contentType = (Array.isArray(value) ? value[0] : value)?.split(';', 1)[0]?.trim().toLowerCase()
@@ -51,6 +59,15 @@ function write(res: ServerResponse, status: number, body: unknown): void {
 }
 
 export function writeOk(res: ServerResponse, value: unknown): void {
+  if (value instanceof RawPatchResponse) {
+    res.writeHead(200, {
+      'content-type': value.contentType,
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+    })
+    res.end(value.body)
+    return
+  }
   write(res, 200, { ok: true, value })
 }
 

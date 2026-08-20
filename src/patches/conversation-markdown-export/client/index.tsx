@@ -7,12 +7,9 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import type { ClientPatch } from '../../../kernel/client/patch.js'
-import { apiErrorText, callPatchApi } from '../../../platform/dsh/client/api.js'
+import { apiErrorText, callPatchBlobApi } from '../../../platform/dsh/client/api.js'
 import { PLUGIN_NAME } from '../../../platform/dsh/identity.js'
-import {
-  CONVERSATION_MARKDOWN_EXPORT_PATCH_ID,
-  type ConversationMarkdownExport,
-} from '../shared.js'
+import { CONVERSATION_MARKDOWN_EXPORT_PATCH_ID } from '../shared.js'
 import { markdownFilename } from './filename.js'
 
 type HeaderUtilityProps = PropsRuntime<'conversation.session.header.utilities'>
@@ -24,7 +21,7 @@ const exportStyles = `
 .dshmore-markdown-export-button > span, .dshmore-markdown-export-button > svg { flex: none; }
 `
 
-function saveMarkdown(filename: string, markdown: string): void {
+function saveMarkdown(filename: string, markdown: Blob): void {
   const url = URL.createObjectURL(new Blob(['\uFEFF', markdown], { type: 'text/markdown;charset=utf-8' }))
   const anchor = document.createElement('a')
   anchor.href = url
@@ -60,13 +57,13 @@ function ConversationMarkdownExportButton(props: HeaderUtilityProps & {
     setBusy(true)
     setError(null)
     try {
-      const result = await callPatchApi<ConversationMarkdownExport>(
+      const markdown = await callPatchBlobApi(
         CONVERSATION_MARKDOWN_EXPORT_PATCH_ID,
         'render',
         { sessionId: props.sessionId, title },
       )
       if (generation.current !== requestGeneration || activeSession.current !== requestSessionId) return
-      saveMarkdown(markdownFilename(title, String(props.sessionId)), result.markdown)
+      saveMarkdown(markdownFilename(title, String(props.sessionId)), markdown)
     } catch (caught) {
       if (generation.current === requestGeneration && activeSession.current === requestSessionId) setError(apiErrorText(caught))
     } finally {

@@ -57,7 +57,8 @@ function MessageActionsController(props: ConversationHeaderProps & {
   const projected = props.useProjection(MESSAGE_VISIBILITY_PROJECTION_KEY) as MessageVisibilityProjection | undefined
   const hiddenSeqs = useMemo(() => new Set(projected?.deletedSeqs ?? []), [projected])
   const hiddenTrajectoryKeys = useMemo(() => new Set(projected?.hiddenTrajectoryKeys ?? []), [projected])
-  const targets = useMessageTargets(props, hiddenSeqs, hiddenTrajectoryKeys)
+  const messageActionsEnabled = MESSAGE_ACTION_PATCHES.some((patch) => settings[patch.id as keyof PatchSettings])
+  const targets = useMessageTargets(props, hiddenSeqs, hiddenTrajectoryKeys, messageActionsEnabled)
 
   return (
     <>
