@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
-import { dirname, extname, join, relative, resolve, sep } from 'node:path'
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -14,6 +14,13 @@ function assertString(value, field, manifestPath) {
 
 async function assertFile(path, field, manifestPath) {
   if (!(await stat(path).catch(() => undefined))?.isFile()) throw new Error(`${manifestPath}: ${field} entry does not exist: ${path}`)
+}
+
+function assertPatchLocal(path, patchDirectory, field, manifestPath) {
+  const within = relative(patchDirectory, path)
+  if (within === '..' || within.startsWith(`..${sep}`) || isAbsolute(within)) {
+    throw new Error(`${manifestPath}: ${field} entry must stay inside its patch directory`)
+  }
 }
 
 function moduleSpecifier(fromDirectory, absoluteEntry) {
@@ -56,6 +63,8 @@ async function readCatalog() {
     const clientRelative = assertString(client.entry, 'client.entry', manifestPath)
     const host = resolve(patchesRoot, directory, hostRelative)
     const clientEntry = resolve(patchesRoot, directory, clientRelative)
+    assertPatchLocal(host, join(patchesRoot, directory), 'host', manifestPath)
+    assertPatchLocal(clientEntry, join(patchesRoot, directory), 'client.entry', manifestPath)
     await assertFile(host, 'host', manifestPath)
     await assertFile(clientEntry, 'client.entry', manifestPath)
     catalog.push({ id, name, description, defaultEnabled: manifest.defaultEnabled, order: manifest.order, host, client: clientEntry, clientKind: client.kind })

@@ -5,7 +5,7 @@ import { PLUGIN_API_PREFIX, PLUGIN_NAME } from '../identity.js'
 import { DshMoreError } from './error.js'
 import type { HostPatch, HostPatchRuntime, PatchApiHandler } from '../../../kernel/host/patch.js'
 import { isTrustedMutationRequest } from './trust.js'
-import { readJson, writeError, writeOk } from './wire.js'
+import { readJson, requireJsonContentType, writeError, writeOk } from './wire.js'
 
 interface WebRuntimeFace { trustedHosts: readonly string[] }
 interface HostContext extends Context { webRuntime: WebRuntimeFace }
@@ -31,6 +31,7 @@ export function registerPatchApi(
 ): void {
   const host = ctx as HostContext
   const routes = collectRoutes(patches, { ctx, confirmationSecret })
+  const logger = ctx.logger(PLUGIN_NAME)
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: PLUGIN_API_PREFIX,
@@ -56,8 +57,13 @@ export function registerPatchApi(
         return
       }
       try {
+        requireJsonContentType(req)
         writeOk(res, await registered.handler(await readJson(req)))
       } catch (error) {
+        if (!(error instanceof DshMoreError) || error.status >= 500) {
+          const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+          logger.error('patch API %s failed: %s', route, detail)
+        }
         writeError(res, error)
       }
     },

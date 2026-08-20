@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
+import { DshMoreError } from '../../platform/dsh/host/error.js'
 import { deleteSessionPermanently } from './host/session-deletion.js'
 import { installLiveSessionHandleTracker } from './host/live-session-handles.js'
 
@@ -56,10 +57,30 @@ describe('permanent session deletion', () => {
     } as unknown as Context
 
     const result = await deleteSessionPermanently(ctx, sessionId)
-    expect(result).toEqual({ sessionId, deletedPath: sessionDir })
+    expect(result).toEqual({ sessionId })
     await expect(stat(sessionDir)).rejects.toThrow()
     await expect(stat(join(root, 'dsh-more-trash'))).rejects.toThrow()
     expect(detached).toBe(sessionId)
+  })
+
+  it('refuses an unknown artifact layout without deleting its directory', async () => {
+    const { sessionId, sessionDir, header } = await fixture()
+    const unexpectedPath = join(sessionDir, 'other.jsonl')
+    await writeFile(unexpectedPath, 'test\n', 'utf8')
+    const ctx = {
+      sessions: { get: () => undefined },
+      agents: { get: () => undefined },
+      sessionPersistence: {
+        list: async () => [header],
+        locate: () => ({ kind: 'jsonl', path: unexpectedPath }),
+      },
+      workspaceRegistry: { list: () => [] },
+    } as unknown as Context
+
+    await expect(deleteSessionPermanently(ctx, sessionId)).rejects.toThrowError(
+      expect.objectContaining<Partial<DshMoreError>>({ code: 'internal', status: 500 }),
+    )
+    await expect(stat(sessionDir)).resolves.toMatchObject({})
   })
 
   it('cancels and disposes a tracked running Agent before deleting its directory', async () => {

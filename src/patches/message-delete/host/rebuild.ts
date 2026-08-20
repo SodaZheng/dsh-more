@@ -8,6 +8,7 @@ import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { PLUGIN_NAME } from '../../../platform/dsh/identity.js'
 import { replaySeedRuntimeContext } from '../../../platform/dsh/host/runtime-context.js'
+import { rollbackFailedContinuation } from '../../../platform/dsh/host/continuation.js'
 import type { MessageDeletionSelection } from './message-selection.js'
 
 function recordedDeletionSeqs(events: readonly SessionEvent[]): Set<number> {
@@ -168,14 +169,17 @@ export async function createDeletedContinuation(
       })
     },
   })
+  const workspace = ctx.workspaceRegistry.list().find((candidate) => candidate.sessionIds.includes(source.id))
+  let attached = false
   try {
-    const workspace = ctx.workspaceRegistry.list().find((candidate) => candidate.sessionIds.includes(source.id))
-    if (workspace !== undefined) await workspace.attachSession(childId)
+    if (workspace !== undefined) {
+      await workspace.attachSession(childId)
+      attached = true
+    }
     await ctx.workspaceRegistry.archiveSession(source.id)
     return { sessionId: childId }
   } catch (error) {
     releaseReplay()
-    await child.dispose().catch(() => undefined)
-    throw error
+    return rollbackFailedContinuation(child, workspace, attached, error)
   }
 }

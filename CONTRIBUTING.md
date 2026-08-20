@@ -10,7 +10,7 @@
 
 开发环境要求：
 
-- Node.js `>= 22.19`；
+- Node.js `22.19.x` 或 `>= 24`；
 - pnpm；
 - 与项目当前依赖匹配的 DSH。本版本面向 DSH `0.1.0-rc.7`。
 
@@ -220,9 +220,9 @@ Standalone 规则：
 2. Host 路由继续经过 loopback/trusted-host、same-origin 和自定义请求头检查；
 3. 预览与提交分离，提交时重新校验会话 revision、目标和确认令牌；
 4. 忙碌会话应拒绝操作，或先完成明确的 cancel、idle、flush、unload 流程；
-5. 删除路径必须从 DSH 返回的逐对象定位信息推导，并验证仍位于受控根目录；
+5. 删除路径必须从 DSH 返回的逐对象定位信息推导，只接受已知的逐会话 artifact 布局，不把本机路径返回 Client；
 6. 禁止对宽泛目录、未解析变量或 glob 执行递归删除；
-7. 错误时保持原数据，不要用“尽量成功”的部分写入掩盖失败。
+7. 多步写入必须把可撤销副作用记录下来，并在后续步骤失败时执行补偿；不要用“尽量成功”的部分写入掩盖失败。
 
 以下内容属于持久化协议，不应在普通重构中随意改名：
 
@@ -283,7 +283,7 @@ pnpm run package:check
 
 - 当前分支已经设置 upstream，并与远端完全同步；
 - 工作区没有未提交文件；
-- 已执行 `npm login --registry=https://registry.npmjs.org/`，且当前 npm 用户有权发布 `dsh-more`；
+- 正式发布前已执行 `npm login --registry=https://registry.npmjs.org/`，且当前 npm 用户有权发布 `dsh-more`；dry-run 不要求 npm 登录；
 - Git 远端允许推送当前分支和 `v<version>` tag。
 
 先执行不产生任何版本、tag 或发布记录的预检：
@@ -301,7 +301,7 @@ pnpm release:minor    # 0.0.1 -> 0.1.0
 pnpm release:major    # 0.0.1 -> 1.0.0
 ```
 
-脚本会依次检查 Git/npm 状态，运行完整项目检查，自动修改 `package.json` 版本并创建 `chore(release): v<version>` 提交和同名 tag，发布到公共 npm registry，最后以一次原子 push 同时推送版本提交和 tag。首次发布时，若 npm 上还不存在这个包，`pnpm release` 会直接发布 `package.json` 中的当前版本并为当前提交创建 tag。
+脚本会依次检查 Git/npm 状态，运行完整项目检查，自动修改 `package.json` 版本并通过 npm `version` 生命周期同步 `dsh.plugin.json`，随后创建 `chore(release): v<version>` 提交和同名 tag，发布到公共 npm registry，最后以一次原子 push 同时推送版本提交和 tag。首次发布时，若 npm 上还不存在这个包，`pnpm release` 会直接发布 `package.json` 中的当前版本并为当前提交创建 tag。
 
 如果 npm 账户要求一次性验证码，可以使用：
 
@@ -319,7 +319,7 @@ pnpm run release -- --otp=123456
 - 运行时由 DSH 提供的外部包放入 `peerDependencies`，并在 `devDependencies` 固定本地开发版本；
 - Client bundle 真正产生外部 `require()` 时，将对应模块加入 `dsh.client.inject`；
 - 只用于 TypeScript module augmentation、且不会出现在发布声明或运行时 bundle 中的包，可以仅作为开发依赖；
-- 同步 `pnpm-lock.yaml` 和 `package-lock.json`；
+- 同步 `pnpm-lock.yaml`；本仓库不维护并行的 `package-lock.json`；
 - 不要为了一个很小的 helper 引入大型依赖。
 
 更新锁文件后再次运行完整检查，并在变更说明中写明依赖的用途。

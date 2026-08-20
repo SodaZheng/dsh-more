@@ -3,13 +3,21 @@ import { DshMoreError } from './error.js'
 
 const MAX_BODY_BYTES = 64 * 1024
 
+export function requireJsonContentType(req: IncomingMessage): void {
+  const value = req.headers['content-type']
+  const contentType = (Array.isArray(value) ? value[0] : value)?.split(';', 1)[0]?.trim().toLowerCase()
+  if (contentType !== 'application/json') {
+    throw new DshMoreError('unsupported-media-type', '请求必须使用 application/json。', 415)
+  }
+}
+
 export async function readJson(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of req) {
     const bytes = Buffer.from(chunk)
     size += bytes.length
-    if (size > MAX_BODY_BYTES) throw new DshMoreError('bad-request', '请求内容过大。')
+    if (size > MAX_BODY_BYTES) throw new DshMoreError('payload-too-large', '请求内容过大。', 413)
     chunks.push(bytes)
   }
   const text = Buffer.concat(chunks).toString('utf8')
@@ -51,6 +59,5 @@ export function writeError(res: ServerResponse, error: unknown): void {
     write(res, error.status, { ok: false, error: { code: error.code, message: error.message } })
     return
   }
-  const message = error instanceof Error ? error.message : String(error)
-  write(res, 500, { ok: false, error: { code: 'internal', message } })
+  write(res, 500, { ok: false, error: { code: 'internal', message: '内部错误，请重试或查看 DSH 日志。' } })
 }

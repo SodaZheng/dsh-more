@@ -101,4 +101,48 @@ describe('message-edit patch', () => {
     await Promise.resolve()
     expect(replayReleased).toBe(true)
   })
+
+  it('removes a failed child from its workspace before disposing it', async () => {
+    const session = Session.create(SessionId('session-test-edit-rollback'))
+    const turn = addTurn(session, 1, 'first')
+    const cut = inspectEditCut(session, turn.userSeq, 'rewritten')
+    const childId = SessionId('session-edit-rollback-child')
+    const events: string[] = []
+    const workspace = {
+      sessionIds: [session.id],
+      attachSession: async (id: string) => { events.push(`attach:${id}`) },
+      detachSession: async (id: string) => { events.push(`detach:${id}`) },
+    }
+    const sourceAgent = {
+      session,
+      ctx: {} as Context,
+      options: {},
+    } as unknown as Agent
+    const ctx = {
+      get: () => undefined,
+      agents: {
+        create: async () => ({
+          agent: {
+            id: childId,
+            followup: () => { events.push('followup') },
+            whenIdle: async () => undefined,
+          },
+          dispose: async () => { events.push('dispose') },
+        }),
+      },
+      workspaceRegistry: {
+        list: () => [workspace],
+        archiveSession: async () => { events.push('archive'); throw new Error('archive failed') },
+      },
+    } as unknown as Context
+
+    await expect(createEditedContinuation(ctx, sourceAgent, cut, 'rewritten', childId)).rejects.toThrow('archive failed')
+    expect(events).toEqual([
+      `attach:${childId}`,
+      'followup',
+      'archive',
+      `detach:${childId}`,
+      'dispose',
+    ])
+  })
 })

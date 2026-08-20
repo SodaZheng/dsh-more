@@ -6,7 +6,7 @@
 
 `dsh-more` 不创建平行的“管理中心”，而是把能力直接嵌入 DSH 现有界面。当前补丁可以编辑用户消息并从该处重新开始、在保留前后上下文的前提下删除单条消息，以及在不改变原生归档语义的情况下永久删除会话。
 
-> **兼容性：** 当前包版本为 `0.0.1`，面向 DeepSeek Harness `0.1.0-rc.7`，要求 Node.js `>= 22.19`。DSH 仍是 RC 版本，升级后可能需要调整下文所述的集中适配层。
+> **兼容性：** 当前发布面向 DeepSeek Harness `0.1.0-rc.7`，要求 Node.js `>= 24`。DSH 仍是 RC 版本，升级后可能需要调整下文所述的集中适配层。
 
 ## 功能概览
 
@@ -22,7 +22,7 @@
 
 ### 环境要求
 
-- Node.js `>= 22.19`
+- Node.js `>= 24`
 - 可正常使用的 `dsh` CLI，以及与 DSH `0.1.0-rc.7` 兼容的 Web profile
 - 能访问发布 `dsh-more` 的 npm registry
 
@@ -166,14 +166,16 @@ dsh plugin --profile web remove dsh-more
 
 这套通用协议不会随补丁数量变化：
 
-- 写接口只接受 `POST`，JSON body 上限为 64 KiB，并要求 `x-dsh-more: 1`；
+- 写接口只接受 `POST` 与 `application/json`，body 上限为 64 KiB，并要求 `x-dsh-more: 1`；
 - 请求 authority 必须是 loopback 或显式 trusted host；拒绝 cross-site；存在 `Origin` 时必须与 Host 匹配；
 - 即使旧 Client 继续发请求，Host router 也会拒绝已关闭补丁；
 - 所有线协议 payload 都从不可信 `unknown` 开始，先校验再使用；
 - 消息操作的预览会获得五分钟 HMAC 确认令牌，绑定 Session、日志 revision、surface generation、选中节点、操作类型、目标、预分配的延续会话与编辑内容摘要；
 - 提交阶段重新读取当前状态，过期或失配的预览会被拒绝，并要求 Agent 处于 idle maintenance window；
+- 续接发布失败时，会先从 Workspace 移除预分配子会话并释放其 Agent handle，再返回错误；
+- 未预期的 Host 异常保留在服务端日志中，浏览器只收到通用内部错误，不暴露本机路径或堆栈细节；
 - 关闭补丁时，Host setup 和 Client DOM 副作用都可以独立清理；
-- 物理删除只接受绝对的逐会话 `jsonl` 定位，验证推导目录仍位于持久化根目录内，卸载实时会话后只删除该精确目录。
+- 物理删除只接受绝对的逐会话 `jsonl` 定位与 DSH 固定 transcript 文件名，卸载实时会话后只删除该会话自有目录；本机路径不会返回 Client。
 
 ## 设计思想
 
@@ -203,6 +205,7 @@ build.mjs             # Host ESM、Client bundle、声明和 inject 校验
 
 ```sh
 pnpm run generate       # 校验清单并重建 src/generated/
+pnpm run peers:check    # 校验锁定依赖的 peer 契约
 pnpm run typecheck      # 生成后执行严格 TypeScript 检查
 pnpm test               # 生成后执行 Vitest 测试
 pnpm run build          # 生成声明、Host 与 Client bundle

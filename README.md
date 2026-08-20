@@ -6,7 +6,7 @@ Practical, independently switchable patches for missing context and history cont
 
 `dsh-more` integrates with the existing DSH interface instead of adding a separate management dashboard. Its current patch set can edit a user message and restart from that point, remove one message while preserving the surrounding context, and permanently delete a session while leaving native archive behavior intact.
 
-> **Compatibility:** package version `0.0.1` targets DeepSeek Harness `0.1.0-rc.7` and requires Node.js `>= 22.19`. DSH is still a release candidate, so upgrades may require changes in the centralized adapter layer described below.
+> **Compatibility:** the current release targets DeepSeek Harness `0.1.0-rc.7` and requires Node.js `>= 24`. DSH is still a release candidate, so upgrades may require changes in the centralized adapter layer described below.
 
 ## Features
 
@@ -22,7 +22,7 @@ All three switches live under **Settings → Plugins → Plugin configuration �
 
 ### Requirements
 
-- Node.js `>= 22.19`
+- Node.js `>= 24`
 - A working `dsh` CLI and a Web profile compatible with DSH `0.1.0-rc.7`
 - Access to the npm registry that publishes `dsh-more`
 
@@ -166,14 +166,16 @@ The generator rejects missing entries, invalid or mismatched IDs, duplicate orde
 
 The generic protocol is stable even as patches are added:
 
-- mutation routes accept `POST` only, cap JSON bodies at 64 KiB, and require `x-dsh-more: 1`;
+- mutation routes accept `POST` with `application/json` only, cap bodies at 64 KiB, and require `x-dsh-more: 1`;
 - the request authority must be loopback or an explicitly trusted host, cross-site requests are rejected, and a supplied `Origin` must match;
 - disabled patches are rejected at the Host router even if an old Client still sends a request;
 - all wire payloads start as `unknown` and are validated before use;
 - message previews receive five-minute HMAC confirmation tokens bound to the session, log revision, surface generation, selected nodes, operation, target, preallocated continuation session, and edited-content digest;
 - commits re-read current state, reject stale previews, and require an idle Agent maintenance window;
+- failed continuation publication detaches the preallocated child and disposes its Agent handle before returning the error;
+- unexpected Host failures are logged with diagnostics while the browser receives a generic internal-error response instead of local paths or stack details;
 - Host setup and Client DOM effects are independently disposable when a patch is disabled;
-- physical deletion accepts only an absolute per-session `jsonl` location, verifies the derived directory stays inside the persistence root, unloads the live session, then deletes that exact directory.
+- physical deletion accepts only an absolute per-session `jsonl` location with DSH's fixed transcript filename, unloads the live session, then deletes that exact session-owned directory; local paths are not returned to the Client.
 
 ## Design principles
 
@@ -203,6 +205,7 @@ Read [CONTRIBUTING.md](./CONTRIBUTING.md) before adding a patch. It documents th
 
 ```sh
 pnpm run generate       # Validate manifests and rebuild src/generated/
+pnpm run peers:check    # Verify the locked peer-dependency graph
 pnpm run typecheck      # Generate, then run strict TypeScript checks
 pnpm test               # Generate, then run the Vitest suite
 pnpm run build          # Generate declarations plus Host and Client bundles

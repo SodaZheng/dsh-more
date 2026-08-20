@@ -44,20 +44,26 @@ function replaceExactText(root: Element, before: string, after: string): void {
 /** Add a separate permanent-delete row beside the native archive row. */
 export function installSessionDeleteMenuItems(onDelete: (archiveButton: HTMLButtonElement) => void): () => void {
   let frame: number | null = null
+  const deleteItems = new WeakMap<HTMLButtonElement, HTMLElement>()
   const sync = (): void => {
     for (const archiveButton of document.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')) {
       const text = archiveButton.textContent?.trim()
       const deleteLabel = text === '归档会话'
         ? '永久删除会话'
         : text === 'Archive session' ? 'Permanently delete session' : undefined
-      if (deleteLabel === undefined || archiveButton.hasAttribute(DELETE_SOURCE_ATTRIBUTE)) continue
+      if (deleteLabel === undefined) continue
       const wrapper = archiveButton.parentElement
       if (wrapper === null) continue
+      if (archiveButton.hasAttribute(DELETE_SOURCE_ATTRIBUTE)) {
+        if (deleteItems.get(archiveButton)?.isConnected === true) continue
+        archiveButton.removeAttribute(DELETE_SOURCE_ATTRIBUTE)
+      }
       const clone = wrapper.cloneNode(true) as HTMLElement
       const deleteButton = clone.querySelector<HTMLButtonElement>('button[role="menuitem"]')
       if (deleteButton === null) continue
       archiveButton.setAttribute(DELETE_SOURCE_ATTRIBUTE, '')
       clone.setAttribute(DELETE_MENU_ATTRIBUTE, '')
+      deleteItems.set(archiveButton, clone)
       replaceExactText(deleteButton, text, deleteLabel)
       deleteButton.setAttribute('aria-label', deleteLabel)
       deleteButton.classList.add('dshmore-session-delete-menu-item')

@@ -19,7 +19,7 @@
     "dsh-plugin"
   ],
   "engines": {
-    "node": ">=22.19"
+    "node": "^22.19.0 || >=24.0.0"
   },
   "packageManager": "pnpm@11.6.0",
   "publishConfig": {
@@ -66,11 +66,13 @@
     }
   },
   "scripts": {
+    "validate:package": "node scripts/validate-package-manifests.mjs",
+    "peers:check": "pnpm peers check",
     "generate": "node scripts/generate-patch-registry.mjs",
     "build": "node build.mjs",
     "typecheck": "npm run generate && tsc --noEmit",
     "test": "npm run generate && vitest run",
-    "check": "npm run typecheck && npm run test && npm run build",
+    "check": "npm run validate:package && npm run peers:check && npm run typecheck && npm run test && npm run build",
     "package": "npm pack",
     "package:check": "npm pack --dry-run",
     "release": "node scripts/release.mjs",
@@ -78,6 +80,7 @@
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major",
+    "version": "node scripts/sync-plugin-version.mjs",
     "prepack": "npm run check"
   },
   "peerDependencies": {
@@ -130,7 +133,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "~18.3.0",
     "@types/react-dom": "~18.3.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "typescript": "^5.9.2",

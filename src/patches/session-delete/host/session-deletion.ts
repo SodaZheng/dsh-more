@@ -1,5 +1,5 @@
 import { rm, stat } from 'node:fs/promises'
-import { dirname, isAbsolute, relative } from 'node:path'
+import { basename, dirname, isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
@@ -64,14 +64,16 @@ async function unloadLiveSession(ctx: Context, sessionId: SessionId): Promise<vo
   }
 }
 
-function safeSessionDirectory(locationPath: string): string {
+function sessionDirectoryFromLocation(locationPath: string): string {
   if (!isAbsolute(locationPath)) {
     throw new DshMoreError('internal', '当前持久化后端没有返回绝对会话路径。', 409)
   }
+  const artifact = basename(locationPath)
+  if (artifact !== 'session.jsonl' && artifact !== 'session.jsonl.zstd') {
+    throw new DshMoreError('internal', '持久化后端返回了未知的会话文件布局。', 500)
+  }
   const sessionDir = dirname(locationPath)
-  const sessionsRoot = dirname(dirname(sessionDir))
-  const withinRoot = relative(sessionsRoot, sessionDir)
-  if (withinRoot === '' || withinRoot.startsWith('..') || isAbsolute(withinRoot)) {
+  if (sessionDir === dirname(sessionDir)) {
     throw new DshMoreError('internal', '持久化后端返回了不安全的会话路径。', 500)
   }
   return sessionDir
@@ -80,7 +82,6 @@ function safeSessionDirectory(locationPath: string): string {
 /** Stop/unload a Session, then recursively remove its exact persistence directory. */
 export async function deleteSessionPermanently(ctx: Context, rawSessionId: string): Promise<{
   sessionId: string
-  deletedPath: string
 }> {
   const sessionId = SessionId(rawSessionId)
   const live = ctx.sessions.get(sessionId) as Session | undefined
@@ -94,7 +95,7 @@ export async function deleteSessionPermanently(ctx: Context, rawSessionId: strin
   if (location.kind !== 'jsonl') {
     throw new DshMoreError('internal', `持久化后端 ${location.kind} 不支持安全的逐目录删除。`, 409)
   }
-  const sessionDir = safeSessionDirectory(location.path)
+  const sessionDir = sessionDirectoryFromLocation(location.path)
   await unloadLiveSession(ctx, sessionId)
 
   const info = await stat(sessionDir).catch(() => undefined)
@@ -105,5 +106,5 @@ export async function deleteSessionPermanently(ctx: Context, rawSessionId: strin
 
   const workspaces = ctx.workspaceRegistry.list().filter((candidate) => candidate.sessionIds.includes(sessionId))
   await Promise.all(workspaces.map(async (workspace) => workspace.detachSession(sessionId)))
-  return { sessionId, deletedPath: sessionDir }
+  return { sessionId }
 }

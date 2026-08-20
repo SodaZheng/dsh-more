@@ -141,13 +141,11 @@ export function useMessageTargets(
         const seq = presentationSeq(node)
         if (seq !== undefined && hiddenSeqs.has(seq)) {
           row.dataset.dshmoreHidden = ''
-          row.style.display = 'none'
           row.querySelector<HTMLElement>('[data-dshmore-message-actions]')?.remove()
           continue
         }
         if (row.dataset.dshmoreHidden !== undefined) {
           delete row.dataset.dshmoreHidden
-          row.style.removeProperty('display')
         }
         const info = messageNodeInfo(node)
         if (info !== null) next.push({ key, ...info, host: hostForRow(row, info.kind) })
@@ -157,10 +155,8 @@ export function useMessageTargets(
         const key = trajectoryRecordKey(row)
         if ((seq !== undefined && hiddenSeqs.has(seq)) || (key !== undefined && hiddenTrajectoryKeys.has(key))) {
           row.dataset.dshmoreHidden = ''
-          row.style.display = 'none'
         } else if (row.dataset.dshmoreHidden !== undefined) {
           delete row.dataset.dshmoreHidden
-          row.style.removeProperty('display')
         }
       }
       setTargets((current) => sameTargets(current, next) ? current : next)
@@ -176,7 +172,6 @@ export function useMessageTargets(
       if (frame !== null) window.cancelAnimationFrame(frame)
       for (const row of document.querySelectorAll<HTMLElement>('[data-dshmore-hidden]')) {
         delete row.dataset.dshmoreHidden
-        row.style.removeProperty('display')
       }
       for (const host of document.querySelectorAll<HTMLElement>('[data-dshmore-message-actions]')) host.remove()
     }

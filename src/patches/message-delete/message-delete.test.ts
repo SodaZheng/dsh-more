@@ -88,6 +88,49 @@ describe('message-delete patch', () => {
     expect(statusWatchReleased).toBe(true)
   })
 
+  it('removes a failed child from its workspace before disposing it', async () => {
+    const session = Session.create(SessionId('session-test-delete-rollback'))
+    const turn = addTurn(session, 1, 'first')
+    const sourceAgent = {
+      session,
+      ctx: {} as Context,
+      options: {},
+    } as unknown as Agent
+    const childId = SessionId('session-delete-rollback-child')
+    const events: string[] = []
+    const workspace = {
+      sessionIds: [session.id],
+      attachSession: async (id: string) => { events.push(`attach:${id}`) },
+      detachSession: async (id: string) => { events.push(`detach:${id}`) },
+    }
+    const ctx = {
+      get: () => undefined,
+      agents: {
+        create: async () => ({
+          agent: { id: childId },
+          dispose: async () => { events.push('dispose') },
+        }),
+      },
+      workspaceRegistry: {
+        list: () => [workspace],
+        archiveSession: async () => { events.push('archive'); throw new Error('archive failed') },
+      },
+    } as unknown as Context
+
+    await expect(createDeletedContinuation(
+      ctx,
+      sourceAgent,
+      selectMessageDeletion(session, turn.assistantSeq),
+      childId,
+    )).rejects.toThrow('archive failed')
+    expect(events).toEqual([
+      `attach:${childId}`,
+      'archive',
+      `detach:${childId}`,
+      'dispose',
+    ])
+  })
+
   it('deletes exactly one middle user message while preserving all other history', () => {
     const session = Session.create(SessionId('session-test-delete-middle'))
     addTurn(session, 1, 'first')

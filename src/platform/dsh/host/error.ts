@@ -1,7 +1,9 @@
 export type DshMoreErrorCode =
   | 'bad-request'
+  | 'payload-too-large'
   | 'forbidden'
   | 'method-not-allowed'
+  | 'unsupported-media-type'
   | 'not-found'
   | 'session-not-live'
   | 'session-busy'

@@ -1,4 +1,5 @@
 export const styles = `
+[data-dshmore-hidden] { display: none !important; }
 .dshmore-inline-actions { display: inline-flex; align-items: center; gap: 10px; }
 .dshmore-inline-button { width: 28px; height: 28px; color: var(--dsw-alias-label-tertiary); cursor: pointer; background: transparent; border: 0; border-radius: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 6px; }
 .dshmore-inline-button:hover { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-interactive-bg-hover); }

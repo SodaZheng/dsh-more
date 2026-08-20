@@ -197,10 +197,6 @@ const currentIsPublished = npmView(`${name}@${currentVersion}`) === currentVersi
 const currentLocalTag = localTagCommit(currentTag);
 const currentRemoteTag = remoteTagCommit(remote, currentTag);
 
-run("npm", ["whoami", `--registry=${REGISTRY}`], {
-  errorMessage: `npm authentication failed; run npm login --registry=${REGISTRY}`,
-});
-
 let mode;
 let releaseVersion;
 let releaseTag;
@@ -270,6 +266,10 @@ if (dryRun) {
   console.log(`\nDry run passed. ${releaseTag} was not created or published.`);
   process.exit(0);
 }
+
+run("npm", ["whoami", `--registry=${REGISTRY}`], {
+  errorMessage: `npm authentication failed; run npm login --registry=${REGISTRY}`,
+});
 
 if (mode === "resume-push") {
   console.log(`\n${name}@${releaseVersion} is already on npm; resuming the Git push...`);

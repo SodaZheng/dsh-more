@@ -8,6 +8,7 @@ import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-ses
 import type {} from '@deepseek-ai/dsh-workspace'
 import { completedTurns } from '../../../platform/dsh/host/session-history.js'
 import { replaySeedRuntimeContext } from '../../../platform/dsh/host/runtime-context.js'
+import { rollbackFailedContinuation } from '../../../platform/dsh/host/continuation.js'
 import { DshMoreError } from '../../../platform/dsh/host/error.js'
 
 export interface EditCut {
@@ -96,19 +97,24 @@ export async function createEditedContinuation(
       releaseRuntimeContextReplay = replaySeedRuntimeContext(agentCtx, seed)
     },
   })
+  const workspace = ctx.workspaceRegistry.list().find((candidate) => candidate.sessionIds.includes(source.id))
+  let attached = false
   try {
-    const workspace = ctx.workspaceRegistry.list().find((candidate) => candidate.sessionIds.includes(source.id))
-    if (workspace !== undefined) await workspace.attachSession(childId)
-    await ctx.workspaceRegistry.archiveSession(source.id)
+    if (workspace !== undefined) {
+      await workspace.attachSession(childId)
+      attached = true
+    }
     child.agent.followup(createUserMessage({
       content: editedContent(original.data.content, editedText.trim()),
       source: { kind: 'user' },
     }))
     void child.agent.whenIdle().then(releaseReplay, releaseReplay)
+    // Archive is the final publication step: no later synchronous operation can
+    // fail and leave the source hidden behind an unusable continuation.
+    await ctx.workspaceRegistry.archiveSession(source.id)
     return { sessionId: childId }
   } catch (error) {
     releaseReplay()
-    await child.dispose().catch(() => undefined)
-    throw error
+    return rollbackFailedContinuation(child, workspace, attached, error)
   }
 }
