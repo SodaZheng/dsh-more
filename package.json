@@ -1,6 +1,6 @@
 {
   "name": "dsh-more",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Practical patches for missing DeepSeek Harness Web context and history controls.",
   "type": "module",
   "license": "MIT",
