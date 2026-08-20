@@ -105,9 +105,7 @@ dsh plugin --profile web remove dsh-more
 ### 编辑用户消息并从这里重新开始
 
 1. 把鼠标移到用户消息上，选择 **编辑并从这里重新开始**。
-2. 修改文本并点击 **预览修改**。
-3. 检查将丢弃的轮次数。
-4. 确认编辑。
+2. 修改文本并点击 **修改并重新开始**，修改会直接生效，不再显示二次预览确认。
 
 插件会在所选消息所属轮次之前切断持久日志，创建继承相同 Workspace、源 Agent 当前 Preset composition、provider/model 和 token limit 的子会话，再把编辑后的消息作为下一条用户输入。源会话只会归档，不会物理删除。
 
@@ -123,7 +121,7 @@ dsh plugin --profile web remove dsh-more
 
 除非工具调用与结果必须保持原子性，否则只删除用户点选的节点。会主动丢弃所选轮次及其后内容的是“编辑并重新开始”。
 
-编辑和消息删除都会在预览时预分配延续会话，并在提交期间监听 DSH 的 `session-added` 增量事件；新会话一出现就直接完成交接，不再先刷新列表、短暂进入空白页再打开新会话。全量刷新只保留为增量事件缺失时的兼容兜底。
+编辑会在单次提交内部完成状态检查并预分配延续会话；消息删除仍在确认前显示预览。两者都会在提交期间监听 DSH 的 `session-added` 增量事件；新会话一出现就直接完成交接，不再先刷新列表、短暂进入空白页再打开新会话。全量刷新只保留为增量事件缺失时的兼容兜底。
 
 ### 永久删除会话
 
@@ -170,7 +168,7 @@ dsh plugin --profile web remove dsh-more
 - 请求 authority 必须是 loopback 或显式 trusted host；拒绝 cross-site；存在 `Origin` 时必须与 Host 匹配；
 - 即使旧 Client 继续发请求，Host router 也会拒绝已关闭补丁；
 - 所有线协议 payload 都从不可信 `unknown` 开始，先校验再使用；
-- 消息操作的预览会获得五分钟 HMAC 确认令牌，绑定 Session、日志 revision、surface generation、选中节点、操作类型、目标、预分配的延续会话与编辑内容摘要；
+- 消息操作的状态检查会获得五分钟 HMAC 确认令牌，绑定 Session、日志 revision、surface generation、选中节点、操作类型、目标、预分配的延续会话与编辑内容摘要；编辑在一次点击内完成检查与提交，消息删除则保留用户可见的预览确认；
 - 提交阶段重新读取当前状态，过期或失配的预览会被拒绝，并要求 Agent 处于 idle maintenance window；
 - 续接发布失败时，会先从 Workspace 移除预分配子会话并释放其 Agent handle，再返回错误；
 - 未预期的 Host 异常保留在服务端日志中，浏览器只收到通用内部错误，不暴露本机路径或堆栈细节；

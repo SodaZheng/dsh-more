@@ -105,9 +105,7 @@ Restart `dsh web` once more. Removing the package removes its UI and runtime pat
 ### Edit a user message and restart
 
 1. Hover over a user message and choose **Edit and restart from here**.
-2. Change the text and select **Preview changes**.
-3. Review how many turns will be discarded.
-4. Confirm the edit.
+2. Change the text and select **Edit and restart**. The change is applied directly without a second preview-and-confirm step.
 
 The plugin cuts the durable log immediately before the selected message's owning turn, creates a child session with the same workspace, live preset composition, provider/model selection, and token limit, then sends the edited message as the next user input. The source session is archived, not physically deleted.
 
@@ -123,7 +121,7 @@ Deletion is implemented as context reconstruction, not as a tombstone placed in 
 
 Only the selected node is removed unless a tool call/result range must remain atomic. Editing is the operation that intentionally discards the selected turn and everything after it.
 
-Both continuation operations preallocate their destination during preview and watch DSH's incremental `session-added` event while committing. As soon as the child appears, the client hands off directly instead of refreshing the list, passing through a blank view, and then reopening. A full refresh remains only as a compatibility fallback when the incremental event is missing.
+Editing performs its state check and preallocates the continuation inside the single submission; message deletion still shows a preview before confirmation. Both operations watch DSH's incremental `session-added` event while committing. As soon as the child appears, the client hands off directly instead of refreshing the list, passing through a blank view, and then reopening. A full refresh remains only as a compatibility fallback when the incremental event is missing.
 
 ### Permanently delete a session
 
@@ -170,7 +168,7 @@ The generic protocol is stable even as patches are added:
 - the request authority must be loopback or an explicitly trusted host, cross-site requests are rejected, and a supplied `Origin` must match;
 - disabled patches are rejected at the Host router even if an old Client still sends a request;
 - all wire payloads start as `unknown` and are validated before use;
-- message previews receive five-minute HMAC confirmation tokens bound to the session, log revision, surface generation, selected nodes, operation, target, preallocated continuation session, and edited-content digest;
+- message-operation state checks receive five-minute HMAC confirmation tokens bound to the session, log revision, surface generation, selected nodes, operation, target, preallocated continuation session, and edited-content digest; editing performs the check and commit within one click, while message deletion retains its visible preview confirmation;
 - commits re-read current state, reject stale previews, and require an idle Agent maintenance window;
 - failed continuation publication detaches the preallocated child and disposes its Agent handle before returning the error;
 - unexpected Host failures are logged with diagnostics while the browser receives a generic internal-error response instead of local paths or stack details;
