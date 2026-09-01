@@ -1,0 +1,12 @@
+{
+  "id": "conversation-quick-navigation",
+  "name": "对话快速导航",
+  "description": "自动加载完整记录，并用常驻目录快速定位当前会话中的每一轮提问",
+  "defaultEnabled": true,
+  "order": 600,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.tsx"
+  }
+}

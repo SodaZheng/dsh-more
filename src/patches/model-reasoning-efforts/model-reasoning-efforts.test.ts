@@ -9,6 +9,7 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
 }))
 import type { Context } from '@deepseek-ai/cordis'
 import { settingsNamespace, type SettingsPathOp } from '@deepseek-ai/dsh-settings'
+import { DEFAULT_PATCH_SETTINGS } from '../../generated/patch-catalog.js'
 import { DshMoreError } from '../../platform/dsh/host/error.js'
 import { hostPatch } from './host/index.js'
 import { validateReasoningEfforts } from './host/validate.js'
@@ -268,8 +269,8 @@ describe('model-reasoning-efforts client render', () => {
     } as never
     const activation = {
       subscribe: () => () => undefined,
-      getSnapshot: () => ({ 'message-edit': true, 'message-delete': true, 'session-delete': true, 'conversation-markdown-export': true, [MODEL_REASONING_EFFORTS_PATCH_ID]: true }),
-      getSettingsSnapshot: () => ({ status: 'ready' as const, value: { 'message-edit': true, 'message-delete': true, 'session-delete': true, 'conversation-markdown-export': true, [MODEL_REASONING_EFFORTS_PATCH_ID]: true }, base: {}, user: {}, writable: true, revision: 1, mode: 'host' as const }),
+      getSnapshot: () => ({ ...DEFAULT_PATCH_SETTINGS, [MODEL_REASONING_EFFORTS_PATCH_ID]: true }),
+      getSettingsSnapshot: () => ({ status: 'ready' as const, value: { ...DEFAULT_PATCH_SETTINGS, [MODEL_REASONING_EFFORTS_PATCH_ID]: true }, base: {}, user: {}, writable: true, revision: 1, mode: 'host' as const }),
       set: async () => undefined,
     }
     clientPatch.install(ctx, activation)
@@ -314,8 +315,8 @@ describe('model-reasoning-efforts client render', () => {
     } as never
     const activation = {
       subscribe: () => () => undefined,
-      getSnapshot: () => ({ 'message-edit': true, 'message-delete': true, 'session-delete': true, 'conversation-markdown-export': true, [MODEL_REASONING_EFFORTS_PATCH_ID]: true }),
-      getSettingsSnapshot: () => ({ status: 'ready' as const, value: { 'message-edit': true, 'message-delete': true, 'session-delete': true, 'conversation-markdown-export': true, [MODEL_REASONING_EFFORTS_PATCH_ID]: true }, base: {}, user: {}, writable: true, revision: 1, mode: 'host' as const }),
+      getSnapshot: () => ({ ...DEFAULT_PATCH_SETTINGS, [MODEL_REASONING_EFFORTS_PATCH_ID]: true }),
+      getSettingsSnapshot: () => ({ status: 'ready' as const, value: { ...DEFAULT_PATCH_SETTINGS, [MODEL_REASONING_EFFORTS_PATCH_ID]: true }, base: {}, user: {}, writable: true, revision: 1, mode: 'host' as const }),
       set: async () => undefined,
     }
     clientPatch.install(ctx, activation)
