@@ -131,6 +131,17 @@ After confirmation, DSH More cancels a running task, waits for idle, flushes the
 
 > **Irreversible:** permanent deletion does not archive the session and does not move it into a DSH More trash directory.
 
+### Configure model reasoning effort
+
+Open **Settings → Models**, expand a provider with **Edit**, and every model entry in the model catalog carries its own **Thinking effort** button:
+
+1. Click a model's **Thinking effort**; in the dialog, check the levels the model offers (off / minimal / low / medium / high / xhigh / max) and, for each enabled level, fill in the wire spelling sent to the gateway (defaults to the level name); `off` needs no wire value — "supported, send nothing".
+2. Click **Save**. The change is written to `reasoningEfforts` under `llm-pi-ai.providers.<route>.models[]` in `settings.yaml`, and the composer's model picker immediately offers those levels.
+
+You can also check **This model does not reason** (writes `reasoningEfforts: false`) or use **Clear** to drop the field and fall back to the installed catalog. Only `off` may leave its wire value empty, and at least one non-`off` level is required — the same rules the pi-ai adapter enforces when resolving a route. Invalid configurations are rejected before any write, so a bad save never corrupts `settings.yaml`.
+
+**Auto-fill:** models added via **Fetch available models** carry no `reasoningEfforts`, which the adapter treats as non-reasoning. After the provider is saved, this patch auto-fills the default `{ low, medium, high }` onto any model that has no `reasoningEfforts`, so a freshly fetched model can think immediately. To keep a model non-reasoning, set it to `reasoningEfforts: false` (explicit `false` is never auto-filled). The default levels can then be tuned per model from the thinking-effort button.
+
 ## Architecture
 
 ![Manifest-driven DSH More architecture](./docs/assets/dsh-more-architecture.jpg)
