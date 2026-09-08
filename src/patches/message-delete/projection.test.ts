@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { Context } from '@deepseek-ai/cordis'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId, SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import { messageDeleteProjection } from './host/projection.js'
 
 function deletionEvent(seq: number, deletedSeqs: number[], plugin = 'dsh-more'): SessionEvent {
@@ -28,7 +31,7 @@ describe('message-delete projection', () => {
     const initial = messageDeleteProjection.init()
     const first = messageDeleteProjection.apply(initial, deletionEvent(10, [2, 3]))
     const second = messageDeleteProjection.apply(first, deletionEvent(11, [3, 7]))
-    expect(messageDeleteProjection.view(second)).toEqual({ deletedSeqs: [2, 3, 7, 10, 11], hiddenTrajectoryKeys: [] })
+    expect(messageDeleteProjection.wire.view(second)).toEqual({ deletedSeqs: [2, 3, 7, 10, 11], hiddenTrajectoryKeys: [] })
     const unrelated = { type: 'turn/start', seq: 12, time: 112, data: { turn: 2 } } as unknown as SessionEvent
     expect(messageDeleteProjection.apply(second, unrelated)).toBe(second)
   })
@@ -60,5 +63,43 @@ describe('message-delete projection', () => {
       deletedSeqs: [4, 20],
       hiddenTrajectoryKeys: ['assistant\u00001\u00001'],
     })
+  })
+})
+
+describe('message-delete rc.1 projection registry', () => {
+  it('publishes the wire view, checkpoints host state, and removes the capability on disposal', () => {
+    const session = Session.create(SessionId('session-projection-registry'))
+    const original = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'original' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'deleted' }],
+      source: { kind: 'plugin', plugin: 'dsh-more', operation: 'delete-message', deletedSeqs: [original.seq] },
+    }), { surfaceOp: { op: 'replace', start: original.seq, end: original.seq }, sourceEventSeqs: [original.seq] })
+    const registry = new SessionProjectionRegistry(new Context())
+    const dispose = registry.register(messageDeleteProjection)
+    try {
+      const expected = { deletedSeqs: [0, 1], hiddenTrajectoryKeys: [] }
+      expect(registry.stateOf(session, 'dshMoreMessageDelete')).toEqual(expected)
+      expect(registry.snapshot(session).values.dshMoreMessageDelete).toEqual(expected)
+      const checkpoint = registry.checkpoint(session)
+      expect(registry.viewCheckpoint(checkpoint).dshMoreMessageDelete).toEqual(expected)
+      const state = registry.stateOf(session, 'dshMoreMessageDelete')
+      session.append('turn/start', { turn: 1 })
+      expect(registry.stateOf(session, 'dshMoreMessageDelete')).toBe(state)
+    } finally {
+      dispose()
+    }
+    expect(registry.snapshot(session).values).not.toHaveProperty('dshMoreMessageDelete')
+  })
+
+  it('ignores unrelated plugins and malformed deletion metadata without invalidating state', () => {
+    const state = messageDeleteProjection.init()
+    expect(messageDeleteProjection.apply(state, deletionEvent(3, [1], 'other-plugin'))).toBe(state)
+    for (const seq of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(messageDeleteProjection.apply(state, deletionEvent(3, [seq]))).toBe(state)
+    }
+    const event = deletionEvent(3, [1])
+    expect(messageDeleteProjection.apply(state, { ...event, seq: SessionSeq(3), surfaceOp: 'append' } as SessionEvent)).toBe(state)
   })
 })

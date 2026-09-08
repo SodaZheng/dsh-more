@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import type { Agent, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
+import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
+import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import {
   createEditedContinuation,
@@ -58,6 +60,7 @@ describe('message-edit patch', () => {
     }
     const ctx = {
       get: () => roster,
+      sessionProjections: { stateOf: () => null },
       agents: {
         create: async (options: CreateAgentOptions) => {
           await options.setup?.(agentCtx)
@@ -120,6 +123,7 @@ describe('message-edit patch', () => {
     } as unknown as Agent
     const ctx = {
       get: () => undefined,
+      sessionProjections: { stateOf: () => null },
       agents: {
         create: async () => ({
           agent: {
@@ -144,5 +148,86 @@ describe('message-edit patch', () => {
       `detach:${childId}`,
       'dispose',
     ])
+  })
+})
+
+describe('message-edit rc.1 continuation metadata', () => {
+  it.each([true, false])('preserves seed ownership and the projected preset (selected: %s)', async (selected) => {
+    const id = SessionId('session-edit-preset-source')
+    const session = Session.create(id, undefined, {
+      version: 0, id, createdAt: 0, isSeeded: false, cwd: '/tmp', ...(selected ? { agentPreset: 'initial' } : {}),
+    })
+    if (selected) {
+      session.append('agent-preset/selected', { agentPreset: 'selected' })
+      const first = addTurn(session, 1, 'retained')
+      session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'compacted context' }],
+        source: { kind: 'plugin', plugin: 'test', form: 'instructions' },
+      }), {
+        surfaceOp: { op: 'replace', start: SessionSeq(first.userSeq), end: SessionSeq(first.assistantSeq) },
+        sourceEventSeqs: [SessionSeq(first.userSeq), SessionSeq(first.assistantSeq)],
+      })
+      expect(session.surface.nodes).not.toContain(first.userSeq)
+    }
+    const boundary = session.seq
+    const target = addTurn(session, selected ? 2 : 1, 'target')
+    const before = session.snapshotEvents()
+    const projections = new SessionProjectionRegistry(new Context())
+    const unregister = projections.register(agentPresetProjectionDefinition)
+    const sourceAgent = { session, ctx: {} as Context, options: {} } as unknown as Agent
+    const childId = SessionId('session-edit-preset-child')
+    let child: Session | undefined
+    const ctx = {
+      get: () => undefined,
+      sessionProjections: projections,
+      agents: {
+        create: async (options: CreateAgentOptions) => {
+          child = Session.create(childId, options.seed, {
+            version: 0, id: childId, createdAt: 1, isSeeded: false, ...options.meta,
+          }, options.inheritedEventCount)
+          return { agent: { id: childId, followup: () => undefined, whenIdle: async () => undefined }, dispose: async () => undefined }
+        },
+      },
+      workspaceRegistry: { list: () => [], archiveSession: async () => undefined },
+    } as unknown as Context
+    try {
+      await createEditedContinuation(ctx, sourceAgent, inspectEditCut(session, target.userSeq, 'changed'), 'changed', childId)
+      if (child === undefined) throw new Error('continuation was not created')
+      expect(child.header).toMatchObject({ parentSession: id, cwd: '/tmp', isSeeded: true })
+      expect(child.header.agentPreset).toBe(selected ? 'selected' : undefined)
+      expect(child.inheritedEventCount).toBe(boundary)
+      expect(child.snapshotEvents(SessionLogOffset(0), child.inheritedEventCount)).toEqual(before.slice(0, boundary))
+      expect(child.inheritedEventCount).toBe(child.seq - 1)
+      expect(child.ownEvents().map((event) => event.type)).toEqual(['session/end-seed'])
+      expect(session.snapshotEvents()).toBe(before)
+      expect(projections.stateOf(child, 'agentPreset')).toBe(selected ? 'selected' : null)
+    } finally {
+      unregister()
+    }
+  })
+})
+
+describe('message-edit input validation', () => {
+  it.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1])('rejects invalid event sequence %s', (seq) => {
+    expect(() => inspectEditCut(Session.create(SessionId('session-invalid-seq')), seq, 'edited')).toThrow('消息序号无效')
+  })
+
+  it('rejects edits to an unfinished turn', () => {
+    const session = Session.create(SessionId('session-unfinished-edit'))
+    session.append('turn/start', { turn: 1 })
+    const message = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'pending' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    expect(() => inspectEditCut(session, message.seq, 'edited')).toThrow('尚未完成')
+  })
+})
+
+describe('rc.1 session log sequence contract', () => {
+  it('rejects a gapped log instead of interpreting event seqs as compacted offsets', () => {
+    const session = Session.create(SessionId('session-gap-source'))
+    const event = session.append('turn/start', { turn: 1 })
+    expect(() => Session.create(SessionId('session-gap-child'), [
+      event, { ...event, seq: SessionSeq(5) },
+    ])).toThrow(/contiguous/)
   })
 })

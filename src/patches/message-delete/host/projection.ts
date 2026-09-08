@@ -8,6 +8,9 @@ import {
 import { PLUGIN_NAME } from '../../../platform/dsh/identity.js'
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    dshMoreMessageDelete: MessageVisibilityProjection
+  }
   interface SessionProjectionMap {
     dshMoreMessageDelete: MessageVisibilityProjection
   }
@@ -45,9 +48,9 @@ function deletionUpdate(event: SessionEvent): { seqs: number[]; trajectoryKeys: 
   }
 }
 
-export const messageDeleteProjection: ProjectionDefinition<typeof MESSAGE_VISIBILITY_PROJECTION_KEY, MessageVisibilityProjection> = {
+export const messageDeleteProjection = {
   key: MESSAGE_VISIBILITY_PROJECTION_KEY,
-  schema,
+  stateSchema: schema,
   stateVersion: 3,
   init: () => ({ deletedSeqs: [], hiddenTrajectoryKeys: [] }),
   apply: (state, event) => {
@@ -58,5 +61,8 @@ export const messageDeleteProjection: ProjectionDefinition<typeof MESSAGE_VISIBI
     if (nextSeqs.length === state.deletedSeqs.length && nextKeys.length === state.hiddenTrajectoryKeys.length) return state
     return { deletedSeqs: nextSeqs, hiddenTrajectoryKeys: nextKeys }
   },
-  view: (state) => state,
-}
+  wire: {
+    viewSchema: schema,
+    view: (state) => state,
+  },
+} satisfies ProjectionDefinition<typeof MESSAGE_VISIBILITY_PROJECTION_KEY, MessageVisibilityProjection>

@@ -105,7 +105,6 @@ export const clientPatch: ClientPatch = {
       name: 'conversation.session.header.utilities',
       id: `${PLUGIN_NAME}-${CONVERSATION_MARKDOWN_EXPORT_PATCH_ID}`,
       order: 100,
-      registrant: PLUGIN_NAME,
     }, (props: HeaderUtilityProps) => <ConversationMarkdownExportButton {...props} activation={activation} />))
   },
 }

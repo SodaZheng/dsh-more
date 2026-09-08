@@ -12,7 +12,7 @@ import { messageDeleteProjection } from './projection.js'
 import { createDeletedContinuation } from './rebuild.js'
 
 function targetTurn(session: Session, seq: number): number {
-  return completedTurns(session.events).find((turn) => seq >= turn.startSeq && seq <= turn.endSeq)?.turn ?? 0
+  return completedTurns(session.snapshotEvents()).find((turn) => seq >= turn.startSeq && seq <= turn.endSeq)?.turn ?? 0
 }
 
 function facts(

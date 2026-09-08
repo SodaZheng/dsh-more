@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { ClientContext, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type {} from '@deepseek-ai/dsh-client-ui-settings'
+export type {} from '@deepseek-ai/dsh-client-ui-settings'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import type { ClientPatch } from '../../../kernel/client/patch.js'
@@ -87,7 +88,7 @@ function summaryLabel(efforts: ModelReasoningEfforts | null): string {
  * settings page (the provider editor's 模型目录). The classes are the models
  * package's own CSS-module hashes, stable per build.
  */
-function findModelEntries(): HTMLElement[] {
+export function findModelEntries(): HTMLElement[] {
   const entries: HTMLElement[] = []
   const catalogs = document.querySelectorAll<HTMLElement>('[class*="modelCatalog"]')
   for (const catalog of catalogs) {
@@ -102,7 +103,7 @@ function findModelEntries(): HTMLElement[] {
  * card's display name (which for such providers equals the route). Returns
  * null for the custom-provider creation card, which has no saved provider yet.
  */
-function providerRouteOf(entry: HTMLElement): string | null {
+export function providerRouteOf(entry: HTMLElement): string | null {
   const editor = entry.closest('[class*="editor"]')
   if (editor === null) return null
   const routeSpan = editor.querySelector<HTMLElement>('[class*="editorRoute"]')
@@ -114,7 +115,7 @@ function providerRouteOf(entry: HTMLElement): string | null {
 }
 
 /** Resolve the model id from a model entry's first row input (the id field). */
-function modelIdOf(entry: HTMLElement): string | null {
+export function modelIdOf(entry: HTMLElement): string | null {
   const input = entry.querySelector<HTMLInputElement>('[class*="modelRow"] input[type="text"]')
   const id = input?.value.trim()
   return id !== undefined && id !== '' ? id : null
@@ -378,9 +379,14 @@ export function ModelsPageEffortPortal(props: OverlayProps & {
     syncButtons()
     const observer = new MutationObserver(schedule)
     observer.observe(document.body, { childList: true, subtree: true })
+    document.addEventListener('input', schedule)
+    document.addEventListener('change', schedule)
     return () => {
       observer.disconnect()
+      document.removeEventListener('input', schedule)
+      document.removeEventListener('change', schedule)
       if (frame !== null) window.cancelAnimationFrame(frame)
+      document.querySelectorAll(`[${EFFORT_BUTTON_ATTR}]`).forEach((element) => element.remove())
     }
   }, [enabled, syncButtons])
 
@@ -438,12 +444,12 @@ export const clientPatch: ClientPatch = {
       subscribe: scope.subscribe.bind(scope),
       set: scope.set.bind(scope),
       unset: scope.unset.bind(scope),
+      mutate: scope.mutate.bind(scope),
     }
     ctx.slots.inject('shell.overlay', () => ctx.slots.register({
       name: 'shell.overlay',
       id: `${PLUGIN_NAME}-${MODEL_REASONING_EFFORTS_PATCH_ID}`,
       order: 90,
-      registrant: PLUGIN_NAME,
     }, (props: OverlayProps) => <ModelsPageEffortPortal {...props} scope={boundScope} activation={activation} />))
   },
 }

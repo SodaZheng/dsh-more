@@ -1,17 +1,15 @@
-import type { ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ChatSnapshot } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { describe, expect, it } from 'vitest'
 import { createMessageSurfaceSelector } from '../../src/platform/dsh/client/message-targets.js'
 
-function snapshot(order: readonly string[], entries: ReadonlyMap<string, object>): ConversationSnapshot {
+function snapshot(order: readonly string[], entries: ReadonlyMap<string, object>): ChatSnapshot {
   return {
-    chat: {
       order,
       nodes: {
         get: (key: string) => entries.get(key),
         values: () => [...entries.values()],
       },
-    },
-  } as unknown as ConversationSnapshot
+  } as unknown as ChatSnapshot
 }
 
 describe('message target surface selector', () => {
@@ -62,6 +60,23 @@ describe('message target surface selector', () => {
     expect(same).toBe(first)
     expect(changed).not.toBe(first)
     expect(changed.byKey.get('tail')?.action).toEqual({ seq: 9, kind: 'assistant', text: 'updated' })
+  })
+
+  it('observes a completed tail arriving through the live keyed store without a new order array', () => {
+    const entries = new Map<string, object>([
+      ['tail', { kind: 'turn-tail', data: { closing: null } }],
+    ])
+    const value = snapshot(['tail'], entries)
+    const select = createMessageSurfaceSelector()
+    const pending = select(value)
+    expect(pending.byKey.get('tail')?.action).toBeNull()
+    entries.set('tail', {
+      kind: 'turn-tail',
+      data: { closing: { finalNode: { seq: 9 }, blocks: [{ kind: 'text', text: 'finished' }] } },
+    })
+    const completed = select({ ...value })
+    expect(completed).not.toBe(pending)
+    expect(completed.byKey.get('tail')?.action?.text).toBe('finished')
   })
 
   it('stays empty while every message action patch is disabled', () => {

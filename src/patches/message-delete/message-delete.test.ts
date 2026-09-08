@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import type { Agent, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
-import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { ToolCallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
+import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { selectMessageDeletion } from './host/message-selection.js'
 import { buildCleanSeed, createDeletedContinuation } from './host/rebuild.js'
@@ -13,7 +15,7 @@ describe('message-delete patch', () => {
     const session = Session.create(SessionId('session-test-message'))
     const first = addTurn(session, 1, 'first')
     expect(selectMessageDeletion(session, first.userSeq)).toMatchObject({ shadowedSeqs: [first.userSeq] })
-    expect(selectMessageDeletion(session, first.assistantSeq)).toMatchObject({ shadowedSeqs: [first.assistantSeq] })
+    expect(selectMessageDeletion(session, first.assistantSeq)).toMatchObject({ shadowedSeqs: [SessionSeq(first.assistantSeq)] })
   })
 
   it('keeps the retained runtime context through the first user turn after deletion', async () => {
@@ -54,6 +56,7 @@ describe('message-delete patch', () => {
     const roster = { composeFrom: (_child: Context, parent: Context) => { composedFrom = parent } }
     const ctx = {
       get: () => roster,
+      sessionProjections: { stateOf: () => null },
       agents: {
         create: async (options: CreateAgentOptions) => {
           await options.setup?.(agentCtx)
@@ -105,6 +108,7 @@ describe('message-delete patch', () => {
     }
     const ctx = {
       get: () => undefined,
+      sessionProjections: { stateOf: () => null },
       agents: {
         create: async () => ({
           agent: { id: childId },
@@ -147,7 +151,7 @@ describe('message-delete patch', () => {
       'third',
       'answer 3',
     ])
-    expect(JSON.stringify(clean.events)).not.toContain('middle')
+    expect(JSON.stringify(clean.snapshotEvents())).not.toContain('middle')
   })
 
   it('rebuilds a clean session without marker or invalid replacement messages', () => {
@@ -155,8 +159,8 @@ describe('message-delete patch', () => {
     const first = addTurn(session, 1, 'first')
     const second = addTurn(session, 2, 'second')
     session.append('compaction/prune', {
-      shadowedRange: { start: first.assistantSeq, end: first.assistantSeq },
-      shadowedSeqs: [first.assistantSeq],
+      shadowedRange: { start: SessionSeq(first.assistantSeq), end: SessionSeq(first.assistantSeq) },
+      shadowedSeqs: [SessionSeq(first.assistantSeq)],
       shadowedTokenCount: 10,
     })
     const marker = session.append('user/message', createUserMessage({
@@ -171,8 +175,8 @@ describe('message-delete patch', () => {
         deletedSeqs: [first.assistantSeq],
       },
     }), {
-      surfaceOp: { op: 'replace', start: first.assistantSeq, end: first.assistantSeq },
-      sourceEventSeqs: [first.assistantSeq],
+      surfaceOp: { op: 'replace', start: SessionSeq(first.assistantSeq), end: SessionSeq(first.assistantSeq) },
+      sourceEventSeqs: [SessionSeq(first.assistantSeq)],
     })
     session.append('assistant/message', {
       turn: 1,
@@ -203,14 +207,14 @@ describe('message-delete patch', () => {
       'first',
       'second',
     ])
-    expect(JSON.stringify(clean.events)).not.toContain('DSH More')
-    expect(JSON.stringify(clean.events)).not.toContain('answer 1')
-    expect(JSON.stringify(clean.events)).not.toContain('answer 2')
+    expect(JSON.stringify(clean.snapshotEvents())).not.toContain('DSH More')
+    expect(JSON.stringify(clean.snapshotEvents())).not.toContain('answer 1')
+    expect(JSON.stringify(clean.snapshotEvents())).not.toContain('answer 2')
   })
 
   it('preserves balanced tool call/result history while deleting a later assistant message', () => {
     const session = Session.create(SessionId('session-test-tool-rebuild'))
-    const callId = CallId('call-1')
+    const callId = ToolCallId('call-1')
     session.append('turn/start', { turn: 1 })
     session.append('step/start', { turn: 1, step: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'use tool' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
@@ -243,5 +247,84 @@ describe('message-delete patch', () => {
       [{ type: 'tool-call', id: callId, name: 'demo', arguments: '{}' }],
       [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'result' }], isError: false }],
     ])
+  })
+})
+
+describe('message-delete rc.1 continuation metadata', () => {
+  it.each([true, false])('preserves seed ownership and the projected preset (selected: %s)', async (selected) => {
+    const id = SessionId('session-delete-preset-source')
+    const session = Session.create(id, undefined, {
+      version: 0, id, createdAt: 0, isSeeded: false, cwd: '/tmp', ...(selected ? { agentPreset: 'initial' } : {}),
+    })
+    if (selected) {
+      session.append('agent-preset/selected', { agentPreset: 'selected' })
+      addTurn(session, 1, 'retained')
+    }
+    const target = addTurn(session, selected ? 2 : 1, 'target')
+    const before = session.snapshotEvents()
+    const projections = new SessionProjectionRegistry(new Context())
+    const unregister = projections.register(agentPresetProjectionDefinition)
+    const sourceAgent = { session, ctx: {} as Context, options: {} } as unknown as Agent
+    const childId = SessionId('session-delete-preset-child')
+    let child: Session | undefined
+    const ctx = {
+      get: () => undefined,
+      sessionProjections: projections,
+      agents: {
+        create: async (options: CreateAgentOptions) => {
+          child = Session.create(childId, options.seed, {
+            version: 0, id: childId, createdAt: 1, isSeeded: false, ...options.meta,
+          }, options.inheritedEventCount)
+          return { agent: { id: childId, followup: () => undefined, whenIdle: async () => undefined }, dispose: async () => undefined }
+        },
+      },
+      workspaceRegistry: { list: () => [], archiveSession: async () => undefined },
+    } as unknown as Context
+    try {
+      await createDeletedContinuation(ctx, sourceAgent, selectMessageDeletion(session, target.assistantSeq), childId)
+      if (child === undefined) throw new Error('continuation was not created')
+      expect(child.header).toMatchObject({ parentSession: id, cwd: '/tmp', isSeeded: false })
+      expect(child.header.agentPreset).toBe(selected ? 'selected' : undefined)
+      expect(child.inheritedEventCount).toBe(0)
+      expect(child.ownEvents()).toEqual(child.snapshotEvents())
+      expect(child.deriveMessages().flatMap((message) => message.content)).not.toContainEqual({ type: 'text', text: selected ? 'answer 2' : 'answer 1' })
+      expect(session.snapshotEvents()).toBe(before)
+      expect(projections.stateOf(child, 'agentPreset')).toBe(selected ? 'selected' : null)
+    } finally {
+      unregister()
+    }
+  })
+})
+
+describe('message-delete tool selection', () => {
+  it('deletes a tool-calling assistant and all paired results while retaining later turns', () => {
+    const session = Session.create(SessionId('session-paired-delete'))
+    const ids = [ToolCallId('call-a'), ToolCallId('call-b')]
+    session.append('turn/start', { turn: 1 })
+    session.append('step/start', { turn: 1, step: 1 })
+    const assistant = session.append('assistant/message', {
+      turn: 1, step: 1,
+      message: createAssistantMessage({
+        content: ids.map((id) => ({ type: 'tool-call', id, name: 'demo', arguments: '{}' })),
+        source: { provider: 'test', model: 'test' },
+      }),
+    }, { surfaceOp: 'append' })
+    const results = ids.map((callId) => {
+      session.append('tool/call', { turn: 1, step: 1, callId, name: 'demo', arguments: '{}' })
+      return session.append('tool/result', {
+        turn: 1, step: 1,
+        message: createToolResultMessage({ callId, content: [{ type: 'text', text: 'result' }], isError: false }),
+      }, { surfaceOp: 'append' })
+    })
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    addTurn(session, 2, 'retained')
+    const selection = selectMessageDeletion(session, assistant.seq)
+    expect(selection.shadowedSeqs).toEqual([assistant.seq, ...results.map((event) => event.seq)])
+    const clean = Session.create(SessionId('session-paired-delete-child'), buildCleanSeed(session, selection))
+    expect(clean.deriveMessages().flatMap((message) => message.content)).toEqual([
+      { type: 'text', text: 'retained' }, { type: 'text', text: 'answer 2' },
+    ])
+    expect(clean.snapshotEvents().some((event) => event.type === 'tool/call' || event.type === 'tool/result')).toBe(false)
   })
 })

@@ -1,11 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import {
-  CallId,
+  ToolCallId,
   createAssistantMessage,
   createToolResultMessage,
   createUserMessage,
 } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
 import { RawPatchResponse } from '../../platform/dsh/host/wire.js'
 import { markdownFilename } from './client/filename.js'
@@ -15,7 +15,7 @@ import { conversationMarkdown } from './host/transcript.js'
 describe('conversation Markdown export', () => {
   it('exports every conversational entry in durable order', () => {
     const session = Session.create(SessionId('session-export'))
-    const callId = CallId('call-demo')
+    const callId = ToolCallId('call-demo')
     session.append('turn/start', { turn: 1 })
     session.append('step/start', { turn: 1, step: 1 })
     session.append('user/message', createUserMessage({
@@ -55,7 +55,7 @@ describe('conversation Markdown export', () => {
       source: { kind: 'plugin', plugin: 'workspace', form: 'instructions' },
     }), { surfaceOp: 'append' })
 
-    const result = conversationMarkdown(session.events, {
+    const result = conversationMarkdown(session.snapshotEvents(), {
       title: '导出示例',
       sessionId: session.id,
       exportedAt: Date.UTC(2026, 7, 20, 1, 2, 3),
@@ -102,9 +102,9 @@ describe('conversation Markdown export', () => {
     const dense = '`x'.repeat(150_000)
     const event = {
       type: 'tool/call',
-      seq: 0,
+      seq: SessionSeq(0),
       time: 0,
-      data: { turn: 1, step: 1, callId: CallId('call-dense'), name: 'dense', arguments: dense },
+      data: { turn: 1, step: 1, callId: ToolCallId('call-dense'), name: 'dense', arguments: dense },
     } as const
     const result = conversationMarkdown([event], {
       title: 'dense',

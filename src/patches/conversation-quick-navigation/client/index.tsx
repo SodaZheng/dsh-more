@@ -38,23 +38,23 @@ const MENU_LIST_ID = 'dshmore-conversation-nav-list'
 
 let navigationCollapsedPreference = false
 
-function conversationRow(root: HTMLElement, key: string): HTMLElement | null {
+export function conversationRow(root: HTMLElement, key: string): HTMLElement | null {
   for (const row of root.querySelectorAll<HTMLElement>('[data-chat-flow-key]')) {
     if (row.dataset.chatFlowKey === key) return row
   }
   return null
 }
 
-function sessionRoot(marker: HTMLElement | null): HTMLElement | null {
+export function sessionRoot(marker: HTMLElement | null): HTMLElement | null {
   return marker?.closest<HTMLElement>('[data-phase]') ?? null
 }
 
-function conversationScrollport(marker: HTMLElement | null): HTMLElement | null {
+export function conversationScrollport(marker: HTMLElement | null): HTMLElement | null {
   return sessionRoot(marker)?.querySelector<HTMLElement>('[data-conversation-scroll]') ?? null
 }
 
 /** The native pre-row paging control owns DSH's reader-position anchoring. */
-function nativeLoadOlderButton(scrollport: HTMLElement): HTMLButtonElement | null {
+export function nativeLoadOlderButton(scrollport: HTMLElement): HTMLButtonElement | null {
   const flow = scrollport.querySelector<HTMLElement>('[data-chat-flow]')
   if (flow === null) return null
   for (const child of flow.children) {
@@ -176,10 +176,10 @@ export function ConversationQuickNavigation(props: HeaderUtilityProps & {
   const settings = useSyncExternalStore(props.activation.subscribe, props.activation.getSnapshot, props.activation.getSnapshot)
   const enabled = settings[CONVERSATION_QUICK_NAVIGATION_PATCH_ID]
   const selector = useMemo(createConversationTurnSelector, [props.sessionId])
-  const allTurns = props.useSession(selector)
+  const allTurns = props.useChat(selector)
   const hasMore = props.useSession((snapshot) => snapshot.hasMore)
   const loadingOlder = props.useSession((snapshot) => snapshot.loadingOlder)
-  const windowSignature = props.useSession(historyWindowSignature)
+  const windowSignature = props.useChat(historyWindowSignature)
   const projected = props.useProjection(MESSAGE_VISIBILITY_PROJECTION_KEY) as MessageVisibilityProjection | undefined
   const hiddenSeqs = useMemo(() => new Set(projected?.deletedSeqs ?? []), [projected])
   const turns = useMemo(
@@ -276,7 +276,7 @@ export function ConversationQuickNavigation(props: HeaderUtilityProps & {
       scrollport?.removeEventListener('scroll', schedule)
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
-  }, [enabled, turns])
+  }, [enabled, turns, props.sessionId])
 
   useEffect(() => {
     if (!shouldAutoLoadOlder({ enabled, surfaceAvailable, hasMore, loadingOlder, paused: autoLoadPaused })) return
@@ -443,7 +443,6 @@ export const clientPatch: ClientPatch = {
       name: 'conversation.session.header.utilities',
       id: `${PLUGIN_NAME}-${CONVERSATION_QUICK_NAVIGATION_PATCH_ID}`,
       order: 120,
-      registrant: PLUGIN_NAME,
     }, (props: HeaderUtilityProps) => <ConversationQuickNavigation {...props} activation={activation} />))
   },
 }

@@ -1,3 +1,7 @@
+export type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+export type {} from '@deepseek-ai/dsh-client-ui-session/client'
+export type {} from '@deepseek-ai/dsh-client-ui-chat/client'
+export type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ReactNode } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 

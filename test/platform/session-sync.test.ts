@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  SessionId,
-  SessionListState,
-  WorkspaceId,
-  WorkspaceListState,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
+import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { RefreshableSessions, RefreshableWorkspaces } from '../../src/platform/dsh/client/runtime.js'
 import {
   adjacentVisibleSession,
@@ -54,7 +52,7 @@ function sessionState(ids: SessionId[], current: SessionId | undefined = sourceI
   }
 }
 
-function workspaceState(sessionIds: SessionId[]): WorkspaceListState {
+function workspaceState(sessionIds: SessionId[]): WorkspaceSnapshot {
   return {
     items: [{
       workspaceId,
@@ -68,8 +66,6 @@ function workspaceState(sessionIds: SessionId[]): WorkspaceListState {
     state: 'idle',
     phase: 'ready',
     error: null,
-    baselinesReady: true,
-    recentWorkspaceId: workspaceId,
   }
 }
 

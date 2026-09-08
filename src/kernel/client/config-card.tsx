@@ -1,13 +1,13 @@
 import { useState, useSyncExternalStore } from 'react'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+export type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import {
   PATCH_CATALOG,
   type PatchId,
 } from '../../generated/patch-catalog.js'
-import { PATCH_SETTINGS_NAMESPACE, PLUGIN_NAME } from '../../platform/dsh/identity.js'
+import { PATCH_SETTINGS_NAMESPACE } from '../../platform/dsh/identity.js'
 import { styles } from '../../platform/dsh/client/styles.js'
 import type { PatchActivationSource } from './activation.js'
 
@@ -99,6 +99,5 @@ export function installPatchConfigCard(ctx: ClientContext, activation: PatchActi
     name: 'settings.plugin.item',
     key: PATCH_SETTINGS_NAMESPACE,
     priority: 90,
-    registrant: PLUGIN_NAME,
   }, (props: CardProps) => <PatchConfigCard {...props} activation={activation} />))
 }

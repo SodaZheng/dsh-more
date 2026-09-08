@@ -2,9 +2,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets'
-import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
-import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset, SessionSeq, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { completedTurns } from '../../../platform/dsh/host/session-history.js'
 import { replaySeedRuntimeContext } from '../../../platform/dsh/host/runtime-context.js'
@@ -12,9 +11,9 @@ import { rollbackFailedContinuation } from '../../../platform/dsh/host/continuat
 import { DshMoreError } from '../../../platform/dsh/host/error.js'
 
 export interface EditCut {
-  targetSeq: number
+  targetSeq: SessionSeq
   turn: number
-  turnStartSeq: number
+  turnStartSeq: SessionSeq
   laterTurnCount: number
   contentDigest: string
 }
@@ -29,18 +28,19 @@ function editedContent(original: readonly ContentBlock[], text: string): Content
 }
 
 export function inspectEditCut(session: Session, targetSeq: number, editedText: string): EditCut {
+  if (!Number.isSafeInteger(targetSeq) || targetSeq < 0) throw new DshMoreError('bad-request', '消息序号无效。')
   const text = editedText.trim()
   if (text === '') throw new DshMoreError('bad-request', '编辑后的消息不能为空。')
   if (text.length > 100_000) throw new DshMoreError('bad-request', '编辑后的消息过长。')
-  const event = session.events[targetSeq]
+  const event = session.eventAt(SessionSeq(targetSeq))
   if (event?.type !== 'user/message' || event.data.source.kind !== 'user' || event.surfaceOp !== 'append') {
     throw new DshMoreError('bad-request', '只能编辑普通用户消息。')
   }
-  const turns = completedTurns(session.events)
+  const turns = completedTurns(session.snapshotEvents())
   const owning = turns.find((turn) => targetSeq >= turn.startSeq && targetSeq <= turn.endSeq)
   if (owning === undefined) throw new DshMoreError('invalid-turn-range', '这条消息所属轮次尚未完成。', 409)
   return {
-    targetSeq,
+    targetSeq: event.seq,
     turn: owning.turn,
     turnStartSeq: owning.startSeq,
     laterTurnCount: turns.filter((turn) => turn.turn >= owning.turn).length,
@@ -48,8 +48,8 @@ export function inspectEditCut(session: Session, targetSeq: number, editedText: 
   }
 }
 
-function sourceMessage(session: Session, targetSeq: number): Extract<SessionEvent, { type: 'user/message' }> {
-  const event = session.events[targetSeq]
+function sourceMessage(session: Session, targetSeq: SessionSeq): Extract<SessionEvent, { type: 'user/message' }> {
+  const event = session.eventAt(targetSeq)
   if (event?.type !== 'user/message') throw new DshMoreError('bad-request', '用户消息不存在。')
   return event
 }
@@ -63,10 +63,12 @@ export async function createEditedContinuation(
 ): Promise<{ sessionId: string }> {
   const source = sourceAgent.session
   const original = sourceMessage(source, cut.targetSeq)
-  const presetId = resolveSessionPreset(source)
+  const presetId = ctx.sessionProjections.stateOf(source, 'agentPreset') ?? undefined
   const roster = ctx.get('agentPresets')
   const request = source.requestHeader()?.config
-  const seed = source.events.slice(0, cut.turnStartSeq)
+  // rc.1 guarantees seq === log index even when the model surface has gaps.
+  // The gap immediately before this turn has the same numeric position.
+  const seed = source.snapshotEvents(SessionLogOffset(0), SessionLogOffset(cut.turnStartSeq))
   let releaseRuntimeContextReplay: (() => void) | undefined
   const releaseReplay = (): void => {
     const release = releaseRuntimeContextReplay
@@ -76,10 +78,11 @@ export async function createEditedContinuation(
   const child = await ctx.agents.create({
     sessionId: childId,
     seed,
+    inheritedEventCount: SessionLogOffset(seed.length),
     meta: {
       ...(source.header.cwd === undefined ? {} : { cwd: source.header.cwd }),
       parentSession: source.id,
-      seedLength: cut.turnStartSeq,
+      isSeeded: true,
       ...(presetId === undefined ? {} : { agentPreset: presetId }),
     },
     agentOptions: {

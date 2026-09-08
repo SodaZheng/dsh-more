@@ -8,14 +8,14 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   Modal: () => null,
 }))
 import type { Context } from '@deepseek-ai/cordis'
-import { settingsNamespace, type SettingsPathOp } from '@deepseek-ai/dsh-settings'
+import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { DEFAULT_PATCH_SETTINGS } from '../../generated/patch-catalog.js'
 import { DshMoreError } from '../../platform/dsh/host/error.js'
 import { hostPatch } from './host/index.js'
 import { validateReasoningEfforts } from './host/validate.js'
 import { LLM_PI_AI_SETTINGS_NAMESPACE, type ModelReasoningEffortsSnapshot } from './shared.js'
 
-const NS = settingsNamespace(LLM_PI_AI_SETTINGS_NAMESPACE)
+const NS = LLM_PI_AI_SETTINGS_NAMESPACE
 
 function fakeRuntime(value: unknown, revision = 7) {
   const opsLog: Array<{ op: 'set' | 'unset'; path: readonly string[]; value?: unknown }> = []
@@ -248,6 +248,9 @@ describe('model-reasoning-efforts client render', () => {
       return Promise.resolve()
     }
     unset() {
+      return Promise.resolve()
+    }
+    mutate() {
       return Promise.resolve()
     }
   }

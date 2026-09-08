@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets'
-import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
-import { CallId } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId, SessionLogOffset, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { PLUGIN_NAME } from '../../../platform/dsh/identity.js'
 import { replaySeedRuntimeContext } from '../../../platform/dsh/host/runtime-context.js'
@@ -31,25 +30,13 @@ function recordedDeletionSeqs(events: readonly SessionEvent[]): Set<number> {
   return deleted
 }
 
-function toolCalls(message: { content: readonly unknown[] }): Array<{ callId: string; name: string; arguments: string }> {
-  const calls: Array<{ callId: string; name: string; arguments: string }> = []
-  for (const block of message.content) {
-    const value = block as { type?: unknown; id?: unknown; callId?: unknown; name?: unknown; arguments?: unknown }
-    if (value.type !== 'tool-call' || typeof value.name !== 'string') continue
-    const callId = typeof value.id === 'string' ? value.id : typeof value.callId === 'string' ? value.callId : undefined
-    if (callId === undefined) continue
-    calls.push({ callId, name: value.name, arguments: typeof value.arguments === 'string' ? value.arguments : '{}' })
-  }
-  return calls
-}
-
 /** Rebuild only the surviving model surface into ordinary, balanced turns and steps. */
 export function buildCleanSeed(source: Session, selection: MessageDeletionSelection): readonly SessionEvent[] {
-  const deleted = recordedDeletionSeqs(source.events)
+  const deleted = recordedDeletionSeqs(source.snapshotEvents())
   for (const seq of selection.shadowedSeqs) deleted.add(seq)
   const survivors = source.surface.nodes
     .filter((seq) => !deleted.has(seq))
-    .map((seq) => source.events[seq])
+    .map((seq) => source.eventAt(seq))
     .filter((event): event is SessionEvent => event !== undefined && source.deriveEventMessage(event) !== null)
 
   const rebuilt = Session.create(SessionId(`session-rebuild-${randomUUID()}`))
@@ -58,7 +45,7 @@ export function buildCleanSeed(source: Session, selection: MessageDeletionSelect
   let turnOpen = false
   let stepOpen = false
   let assistantSeen = false
-  const loggedCalls = new Set<string>()
+  const loggedCalls = new Set<ToolCallId>()
 
   const closeStep = (): void => {
     if (!stepOpen) return
@@ -103,14 +90,15 @@ export function buildCleanSeed(source: Session, selection: MessageDeletionSelect
         ...(event.data.usage === undefined ? {} : { usage: event.data.usage }),
       }, { surfaceOp: 'append' })
       assistantSeen = true
-      for (const call of toolCalls(event.data.message)) {
-        rebuilt.append('tool/call', { turn, step, callId: CallId(call.callId), name: call.name, arguments: call.arguments })
-        loggedCalls.add(call.callId)
+      for (const call of event.data.message.content) {
+        if (call.type !== 'tool-call') continue
+        rebuilt.append('tool/call', { turn, step, callId: call.id, name: call.name, arguments: call.arguments })
+        loggedCalls.add(call.id)
       }
       continue
     }
     if (event.type === 'tool/result') {
-      const callId = String(event.data.message.source.callId)
+      const callId = event.data.message.source.callId
       if (!loggedCalls.has(callId)) {
         rebuilt.append('tool/call', { turn, step, callId: event.data.message.source.callId, name: 'restored-tool', arguments: '{}' })
         loggedCalls.add(callId)
@@ -119,7 +107,7 @@ export function buildCleanSeed(source: Session, selection: MessageDeletionSelect
     }
   }
   closeTurn()
-  return rebuilt.events
+  return rebuilt.snapshotEvents()
 }
 
 export async function createDeletedContinuation(
@@ -129,7 +117,7 @@ export async function createDeletedContinuation(
   childId = SessionId(`session-${randomUUID()}`),
 ): Promise<{ sessionId: string }> {
   const source = sourceAgent.session
-  const presetId = resolveSessionPreset(source)
+  const presetId = ctx.sessionProjections.stateOf(source, 'agentPreset') ?? undefined
   const roster = ctx.get('agentPresets')
   const request = source.requestHeader()?.config
   const provider = request?.provider ?? sourceAgent.options.provider
@@ -149,10 +137,12 @@ export async function createDeletedContinuation(
   const child = await ctx.agents.create({
     sessionId: childId,
     seed,
+    // Rebuilt events are renumbered child-owned history, not a verbatim parent prefix.
+    inheritedEventCount: SessionLogOffset(0),
     meta: {
       ...(source.header.cwd === undefined ? {} : { cwd: source.header.cwd }),
       parentSession: source.id,
-      seedLength: seed.length,
+      isSeeded: false,
       ...(presetId === undefined ? {} : { agentPreset: presetId }),
     },
     agentOptions: {

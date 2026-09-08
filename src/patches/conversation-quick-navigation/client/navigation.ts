@@ -1,4 +1,4 @@
-import type { ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ChatSnapshot } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { contentText } from '../../../platform/dsh/client/message-content.js'
 
@@ -61,15 +61,12 @@ function sameTurns(left: readonly ConversationTurnSummary[], right: readonly Con
 }
 
 /** Select stable user-authored turn summaries without observing assistant streaming frames. */
-export function createConversationTurnSelector(): (snapshot: ConversationSnapshot) => readonly ConversationTurnSummary[] {
-  let previousOrder: readonly string[] | undefined
+export function createConversationTurnSelector(): (snapshot: ChatSnapshot) => readonly ConversationTurnSummary[] {
   let previous: readonly ConversationTurnSummary[] = []
   return (snapshot) => {
-    if (snapshot.chat.order === previousOrder) return previous
-    previousOrder = snapshot.chat.order
     const next: ConversationTurnSummary[] = []
-    for (const key of snapshot.chat.order) {
-      const summary = turnSummary(snapshot.chat.nodes.get(key), key, next.length + 1)
+    for (const key of snapshot.order) {
+      const summary = turnSummary(snapshot.nodes.get(key), key, next.length + 1)
       if (summary !== null) next.push(summary)
     }
     if (!sameTurns(previous, next)) previous = next
@@ -78,10 +75,10 @@ export function createConversationTurnSelector(): (snapshot: ConversationSnapsho
 }
 
 /** Stable evidence that an older history page prepended visible conversation material. */
-export function historyWindowSignature(snapshot: ConversationSnapshot): string {
-  const first = snapshot.chat.order[0] ?? ''
-  const last = snapshot.chat.order.at(-1) ?? ''
-  return `${first}\u0000${last}\u0000${String(snapshot.chat.order.length)}`
+export function historyWindowSignature(snapshot: ChatSnapshot): string {
+  const first = snapshot.order[0] ?? ''
+  const last = snapshot.order.at(-1) ?? ''
+  return `${first}\u0000${last}\u0000${String(snapshot.order.length)}`
 }
 
 export function shouldAutoLoadOlder(state: AutoLoadOlderState): boolean {

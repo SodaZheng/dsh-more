@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
-import { settingsNamespace, type SettingsPathOp } from '@deepseek-ai/dsh-settings'
+import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import type { HostPatch } from '../../../kernel/host/patch.js'
 import { DshMoreError } from '../../../platform/dsh/host/error.js'
 import { requireString } from '../../../platform/dsh/host/wire.js'
@@ -14,7 +14,7 @@ import {
 } from '../shared.js'
 import { validateReasoningEfforts } from './validate.js'
 
-const LLM_PI_AI_NS = settingsNamespace(LLM_PI_AI_SETTINGS_NAMESPACE)
+const LLM_PI_AI_NS = LLM_PI_AI_SETTINGS_NAMESPACE
 
 /** The resolved llm-pi-ai section, or undefined while the namespace is not registered. */
 function piAiSection(ctx: Context): { providers: Record<string, unknown> } | undefined {

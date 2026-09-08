@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   Button,
@@ -88,6 +89,7 @@ export function installSessionDeleteMenuItems(onDelete: (archiveButton: HTMLButt
     frame = null
     for (const [archiveButton, deleteItem] of deleteItems) {
       if (!archiveButton.isConnected) {
+        deleteItem.remove()
         deleteItems.delete(archiveButton)
       } else if (!deleteItem.isConnected) {
         archiveButton.removeAttribute(DELETE_SOURCE_ATTRIBUTE)
@@ -241,7 +243,6 @@ export const clientPatch: ClientPatch = {
       name: 'shell.overlay',
       id: `${PLUGIN_NAME}-${SESSION_DELETE_PATCH_ID}`,
       order: 90,
-      registrant: PLUGIN_NAME,
     }, (props: OverlayProps) => <SessionDeleteController {...props} ctx={ctx} activation={activation} />))
   },
 }

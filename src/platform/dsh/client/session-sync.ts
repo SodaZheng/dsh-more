@@ -1,4 +1,6 @@
-import type { SessionId, SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { RefreshableSessions, RefreshableWorkspaces } from './runtime.js'
 
 const INCREMENTAL_SYNC_GRACE_MS = 180
@@ -63,7 +65,7 @@ export function followSessionHandoff(
 
 function sessionRemovalSettled(
   sessions: SessionListState,
-  workspaces: WorkspaceListState,
+  workspaces: WorkspaceSnapshot,
   sessionId: SessionId,
 ): boolean {
   return sessions.byId[sessionId] === undefined
@@ -109,7 +111,7 @@ export async function settleSessionRemoval(
 /** Pick the nearest non-archived row so deleting the current session never exposes a blank gap. */
 export function adjacentVisibleSession(
   sessions: SessionListState,
-  workspaces: WorkspaceListState,
+  workspaces: WorkspaceSnapshot,
   deletingSessionId: SessionId,
 ): SessionId | undefined {
   if (sessions.current !== deletingSessionId) return undefined

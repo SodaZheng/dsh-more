@@ -13,7 +13,7 @@ function render(ctx: Parameters<HostPatch['routes']>[0]['ctx'], payload: unknown
   if ([...title].length > MAX_TITLE_LENGTH) throw new DshMoreError('bad-request', '会话标题过长。')
   const session = requireLiveSession(ctx, sessionId)
   requireIdleAgent(ctx, sessionId, session)
-  const transcript = conversationMarkdown(session.events, { title, sessionId })
+  const transcript = conversationMarkdown(session.snapshotEvents(), { title, sessionId })
   return new RawPatchResponse(transcript.markdown, 'text/markdown; charset=utf-8')
 }
 

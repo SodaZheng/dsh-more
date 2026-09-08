@@ -1,10 +1,10 @@
 import { useMemo, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+export type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+export type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+export type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+export type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import {
   decodePatchSettings,
   type PatchSettings,
@@ -87,7 +87,6 @@ export function apply(ctx: ClientContext): void {
     name: 'conversation.session.header.utilities',
     id: `${PLUGIN_NAME}-message-actions`,
     order: 90,
-    registrant: PLUGIN_NAME,
   }, (props: ConversationHeaderProps) => <MessageActionsController {...props} ctx={ctx} activation={activation} />))
   for (const patch of CLIENT_PATCHES) patch.install(ctx, activation)
 }

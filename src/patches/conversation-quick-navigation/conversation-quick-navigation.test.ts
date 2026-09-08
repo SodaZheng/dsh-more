@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ChatSnapshot } from '@deepseek-ai/dsh-client-ui-chat/client'
 import {
   activeTurnAt,
   createConversationTurnSelector,
@@ -15,13 +15,11 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   IconChevronUpOutline14: () => null,
 }))
 
-function snapshot(order: readonly string[], entries: ReadonlyMap<string, object>): ConversationSnapshot {
+function snapshot(order: readonly string[], entries: ReadonlyMap<string, object>): ChatSnapshot {
   return {
-    chat: {
       order,
       nodes: { get: (key: string) => entries.get(key) },
-    },
-  } as unknown as ConversationSnapshot
+  } as unknown as ChatSnapshot
 }
 
 describe('conversation-quick-navigation patch', () => {
@@ -53,6 +51,19 @@ describe('conversation-quick-navigation patch', () => {
       ['assistant-1', { kind: 'partial', data: { text: 'streaming' } }],
     ])))
     expect(second).toBe(first)
+  })
+
+  it('refreshes user labels when keyed nodes change without a new order array', () => {
+    const entries = new Map<string, object>([
+      ['user', { kind: 'user', data: { seq: 1, content: [{ type: 'text', text: 'before' }] } }],
+    ])
+    const value = snapshot(['user'], entries)
+    const select = createConversationTurnSelector()
+    const first = select(value)
+    entries.set('user', { kind: 'user', data: { seq: 1, content: [{ type: 'text', text: 'after' }] } })
+    const changed = select({ ...value })
+    expect(changed).not.toBe(first)
+    expect(changed[0]?.label).toBe('after')
   })
 
   it('chooses the latest turn above the reading line and computes a bounded jump', () => {

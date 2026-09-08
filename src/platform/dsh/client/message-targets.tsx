@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ChatSnapshot } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { contentText } from './message-content.js'
 import type { ConversationHeaderProps, MessageTarget } from '../../../kernel/client/message-actions.js'
 
@@ -72,19 +72,15 @@ function sameSurfaceRow(left: MessageSurfaceRow | undefined, right: MessageSurfa
 }
 
 /** Select only facts used by message actions, retaining identity across unrelated stream frames. */
-export function createMessageSurfaceSelector(active = true): (snapshot: ConversationSnapshot) => MessageSurfaceSnapshot {
+export function createMessageSurfaceSelector(active = true): (snapshot: ChatSnapshot) => MessageSurfaceSnapshot {
   if (!active) return () => EMPTY_MESSAGE_SURFACE
   const nodeCache = new WeakMap<object, MessageSurfaceRow>()
   let previous = EMPTY_MESSAGE_SURFACE
-  let previousOrder: readonly string[] | undefined
 
   return (snapshot) => {
-    // DSH retains chat.order identity for content-only streaming publications.
-    if (snapshot.chat.order === previousOrder) return previous
-    previousOrder = snapshot.chat.order
     const rows: MessageSurfaceRow[] = []
-    for (const key of snapshot.chat.order) {
-      const node = snapshot.chat.nodes.get(key)
+    for (const key of snapshot.order) {
+      const node = snapshot.nodes.get(key)
       if (node === undefined) continue
       let row = nodeCache.get(node)
       if (row === undefined) {
@@ -104,11 +100,11 @@ export function createMessageSurfaceSelector(active = true): (snapshot: Conversa
   }
 }
 
-function hostForRow(row: HTMLElement, kind: MessageTarget['kind']): HTMLElement {
+export function hostForRow(row: HTMLElement, kind: MessageTarget['kind']): HTMLElement {
   const existing = row.querySelector<HTMLElement>(':scope [data-dshmore-message-actions]')
   if (kind === 'assistant') {
-    const turnRoot = row.querySelector<HTMLElement>('[data-turn-tail][data-time-hover-root]')
-    const copyButton = turnRoot?.querySelector<HTMLElement>('button[aria-label="复制"], button[aria-label="Copy"]')
+    const turnRoot = row.querySelector<HTMLElement>('[data-turn-tail][data-actions-reveal]')
+    const copyButton = turnRoot?.querySelector<HTMLElement>('button[aria-label="复制"], button[aria-label="Copy"], button[aria-label="已复制"], button[aria-label="Copied"]')
     const builtInActions = copyButton?.parentElement
     const placeBeforeClock = (host: HTMLElement): void => {
       if (builtInActions === undefined || builtInActions === null) return
@@ -132,7 +128,7 @@ function hostForRow(row: HTMLElement, kind: MessageTarget['kind']): HTMLElement 
     else row.appendChild(host)
     return host
   }
-  const copyButton = row.querySelector<HTMLElement>('button[aria-label="复制"], button[aria-label="Copy"]')
+  const copyButton = row.querySelector<HTMLElement>('button[aria-label="复制"], button[aria-label="Copy"], button[aria-label="已复制"], button[aria-label="Copied"]')
   const builtInActions = copyButton?.parentElement
   if (existing !== null) {
     if (builtInActions !== undefined && builtInActions !== null && (existing.parentElement !== builtInActions || existing.nextElementSibling !== copyButton)) {
@@ -188,7 +184,7 @@ export function useMessageTargets(
   active = true,
 ): readonly MessageTarget[] {
   const selector = useMemo(() => createMessageSurfaceSelector(active), [active, props.sessionId])
-  const surface = props.useSession(selector)
+  const surface = props.useChat(selector)
   const surfaceRef = useRef(surface)
   const hiddenSeqsRef = useRef(hiddenSeqs)
   const hiddenTrajectoryKeysRef = useRef(hiddenTrajectoryKeys)
@@ -307,7 +303,10 @@ export function useMessageTargets(
     requestFullScanRef.current = requestFullScan
     const observer = new MutationObserver((records) => {
       for (const record of records) {
-        if (record.removedNodes.length > 0) pruneDisconnected = true
+        if (record.removedNodes.length > 0) {
+          pruneDisconnected = true
+          collectRows(record.target)
+        }
         record.addedNodes.forEach(collectRows)
       }
       if (pendingChatRows.size > 0 || pendingTrajectoryRows.size > 0 || pruneDisconnected) schedule()
@@ -323,7 +322,7 @@ export function useMessageTargets(
       }
       for (const host of document.querySelectorAll<HTMLElement>('[data-dshmore-message-actions]')) host.remove()
     }
-  }, [active])
+  }, [active, props.sessionId])
 
   useLayoutEffect(() => {
     requestFullScanRef.current?.()

@@ -6,7 +6,7 @@
 
 `dsh-more` 不创建平行的“管理中心”，而是把能力直接嵌入 DSH 现有界面。当前补丁可以编辑用户消息并从该处重新开始、在保留前后上下文的前提下删除单条消息，以及在不改变原生归档语义的情况下永久删除会话。
 
-> **兼容性：** 当前发布面向 DeepSeek Harness `0.1.0-rc.7`，要求 Node.js `>= 24`。DSH 仍是 RC 版本，升级后可能需要调整下文所述的集中适配层。
+> **兼容性：** 当前发布面向 DeepSeek Harness `0.1.2-rc.1`，要求 Node.js `>= 24`。DSH 仍是 RC 版本，升级后可能需要调整下文所述的集中适配层。
 
 ## 功能概览
 
@@ -23,7 +23,7 @@
 ### 环境要求
 
 - Node.js `>= 24`
-- 可正常使用的 `dsh` CLI，以及与 DSH `0.1.0-rc.7` 兼容的 Web profile
+- 可正常使用的 `dsh` CLI，以及与 DSH `0.1.2-rc.1` 兼容的 Web profile
 - 能访问发布 `dsh-more` 的 npm registry
 
 只有从源码安装或参与开发时才需要 pnpm。安装已发布版本时，应通过 DSH 插件命令把包加入指定 profile；不要使用 `npm install -g` 全局安装。
@@ -233,7 +233,9 @@ pnpm run package        # 构建并生成 npm tarball
 
 ## 兼容性说明
 
-- 当前依赖面向 DSH `0.1.0-rc.7`；预发布 API 或 DOM 变化可能要求更新 adapter。
+本次适配迁移到新版拆分后的 Client 服务、`useChat` 聊天快照、设置注册和会话投影接口，并更新消息操作行定位。依赖与锁文件统一到 `0.1.2-rc.1`；不再加载已停止更新的 `dsh-client-runtime`。已有本地链接安装在重新构建后，需要重启 DSH 并刷新页面以加载新的 Host 和 Client。
+
+- 当前依赖面向 DSH `0.1.2-rc.1`；预发布 API 或 DOM 变化可能要求更新 adapter。
 - DSH More 的产品内文案目前以简体中文为主；对 DSH 原生 Copy/Archive 元素的定位同时识别中英文标签。
 - 消息操作只面向仍在当前 model surface 中的普通用户消息和助手消息；编辑要求所属轮次已经完成。
 - 永久删除只支持 DSH 返回的 `jsonl` 持久化定位。

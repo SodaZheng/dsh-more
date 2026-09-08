@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { ClientPatchActivation } from '../../src/kernel/client/activation.js'
 import { HostPatchActivation } from '../../src/kernel/host/activation.js'
 import type { HostPatch } from '../../src/kernel/host/patch.js'
@@ -69,6 +70,7 @@ describe('patch activation', () => {
         for (const listener of listeners) listener()
       },
       unset: async () => undefined,
+      mutate: async () => undefined,
     }
     const activation = new ClientPatchActivation(scope)
     let notified = 0

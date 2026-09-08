@@ -1,4 +1,5 @@
-import type { ISessions, IWorkspaces } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { IWorkspaces } from '@deepseek-ai/dsh-api-workspace-controller/client'
 
 export interface RefreshableSessions extends ISessions {
   refresh(): Promise<void>

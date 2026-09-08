@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { PatchConfigCard, type PatchConfigCardProps } from '../../src/kernel/client/config-card.js'
 import type { PatchActivationSource } from '../../src/kernel/client/activation.js'
 import {

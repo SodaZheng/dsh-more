@@ -1,14 +1,14 @@
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionSeq } from '@deepseek-ai/dsh-session'
 
 export interface CompletedTurn {
   turn: number
-  startSeq: number
-  endSeq: number
+  startSeq: SessionSeq
+  endSeq: SessionSeq
 }
 
 /** Return only turns with a durable start/end pair, in log order. */
 export function completedTurns(events: readonly SessionEvent[]): CompletedTurn[] {
-  const starts = new Map<number, number>()
+  const starts = new Map<number, SessionSeq>()
   const turns: CompletedTurn[] = []
   for (const event of events) {
     if (event.type === 'turn/start') {
