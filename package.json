@@ -116,7 +116,8 @@
     "@deepseek-ai/dsh-client-ui-session": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-client-ui-renderer": "^0.1.2-rc.1",
     "@deepseek-ai/dsh-client-store": "^0.1.2-rc.1",
-    "@deepseek-ai/dsh-llm-retry": "^0.1.2-rc.1"
+    "@deepseek-ai/dsh-llm-retry": "^0.1.2-rc.1",
+    "@deepseek-ai/dsh-session-title": "^0.1.2-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.2",
@@ -155,6 +156,7 @@
     "@deepseek-ai/dsh-client-ui-renderer": "0.1.2-rc.1",
     "@deepseek-ai/dsh-client-store": "0.1.2-rc.1",
     "@deepseek-ai/dsh-llm-retry": "0.1.2-rc.1",
-    "happy-dom": "20.14.0"
+    "happy-dom": "20.14.0",
+    "@deepseek-ai/dsh-session-title": "0.1.2-rc.1"
   }
 }

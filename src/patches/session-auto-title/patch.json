@@ -1,0 +1,12 @@
+{
+  "id": "session-auto-title",
+  "name": "会话自动命名",
+  "description": "新会话首条需求后，使用当前模型生成「类型 · 具体任务」标题；保留手动命名，失败时保留原有标题",
+  "defaultEnabled": true,
+  "order": 600,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.ts"
+  }
+}
