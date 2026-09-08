@@ -1,7 +1,7 @@
 {
   "name": "dsh-more",
   "description": "Practical patches for missing DSH Web context and history controls",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "entry": {
     "name": "dsh-more",
     "inject": [
