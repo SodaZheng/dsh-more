@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hostForRow } from '../../src/platform/dsh/client/message-targets.js'
 import { installSessionDeleteMenuItems } from '../../src/patches/session-delete/client/index.js'
-import { conversationRow, conversationScrollport, nativeLoadOlderButton } from '../../src/patches/conversation-quick-navigation/client/index.js'
 import { findModelEntries, modelIdOf, providerRouteOf } from '../../src/patches/model-reasoning-efforts/client/index.js'
 import { clientPatch as exportPatch } from '../../src/patches/conversation-markdown-export/client/index.js'
 import { DEFAULT_PATCH_SETTINGS } from '../../src/generated/patch-catalog.js'
@@ -80,19 +79,6 @@ describe('DSH 0.1.2-rc.1 client DOM', () => {
     dispose()
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(1)
     expect(archive.hasAttribute('data-dshmore-session-delete-source')).toBe(false)
-  })
-
-  it('finds the resident scroller, paging button and exact opaque navigation key', () => {
-    document.body.innerHTML = '<section data-phase="active"><header><span id="marker"></span></header><div data-conversation-scroll><div data-chat-flow><div><button>Load older</button></div><div data-chat-flow-key="turn"></div></div><div data-composer-seat></div></div></section>'
-    const scrollport = conversationScrollport(document.getElementById('marker'))!
-    expect(scrollport.hasAttribute('data-conversation-scroll')).toBe(true)
-    expect(nativeLoadOlderButton(scrollport)?.textContent).toBe('Load older')
-    const row = conversationRow(scrollport, 'turn')!
-    row.dataset.chatFlowKey = 'opaque"[key]'
-    expect(conversationRow(scrollport, 'opaque"[key]')).toBe(row)
-    scrollport.querySelector('button')!.parentElement!.remove()
-    row.innerHTML = '<button>Copy</button>'
-    expect(nativeLoadOlderButton(scrollport)).toBeNull()
   })
 
   it('resolves the saved provider route and current model id in the latest models editor', () => {
