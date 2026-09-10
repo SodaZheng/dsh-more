@@ -1,0 +1,12 @@
+{
+  "id": "model-capabilities",
+  "name": "模型能力配置",
+  "description": "在模型配置页设置每个模型的识图能力、可选思考类型与思考参数格式",
+  "defaultEnabled": true,
+  "order": 500,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.tsx"
+  }
+}

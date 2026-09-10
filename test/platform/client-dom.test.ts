@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hostForRow } from '../../src/platform/dsh/client/message-targets.js'
 import { installSessionDeleteMenuItems } from '../../src/patches/session-delete/client/index.js'
-import { findModelEntries, modelIdOf, providerRouteOf } from '../../src/patches/model-reasoning-efforts/client/index.js'
 import { clientPatch as exportPatch } from '../../src/patches/conversation-markdown-export/client/index.js'
 import { DEFAULT_PATCH_SETTINGS } from '../../src/generated/patch-catalog.js'
 import { callPatchBlobApi } from '../../src/platform/dsh/client/api.js'
@@ -79,20 +78,6 @@ describe('DSH 0.1.2-rc.1 client DOM', () => {
     dispose()
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(1)
     expect(archive.hasAttribute('data-dshmore-session-delete-source')).toBe(false)
-  })
-
-  it('resolves the saved provider route and current model id in the latest models editor', () => {
-    document.body.innerHTML = '<li class="hash_rowCard"><span class="hash_rowName">Display name</span><div class="hash_editor"><span class="hash_editorRoute">api-route</span><div class="hash_modelCatalog"><div class="hash_modelEntry"><div class="hash_modelRow"><input type="text" value="model-a"><input type="text" value="Model A"></div></div></div></div></li>'
-    const [entry] = findModelEntries()
-    expect(entry).toBeDefined()
-    expect(providerRouteOf(entry!)).toBe('api-route')
-    expect(modelIdOf(entry!)).toBe('model-a')
-    entry!.querySelector('input')!.value = 'model-b'
-    expect(modelIdOf(entry!)).toBe('model-b')
-    document.querySelector('.hash_editorRoute')!.remove()
-    expect(providerRouteOf(entry!)).toBe('Display name')
-    document.querySelector('.hash_rowName')!.remove()
-    expect(providerRouteOf(entry!)).toBeNull()
   })
 
   it('exports the selected session as a downloadable Markdown blob', async () => {

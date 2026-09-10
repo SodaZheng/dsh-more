@@ -15,8 +15,9 @@ Practical, independently switchable patches for missing context and history cont
 | Edit and restart | User-message action row | Creates a clean continuation before the selected turn, submits the edited text, archives the source branch, and opens the child session | On |
 | Delete one message | User- and assistant-message action rows | Removes the selected model-surface node, expands only when tool call/result pairing requires it, rebuilds the surviving context, and opens a child session | On |
 | Permanently delete session | Separate item beside the native Archive action | Stops and unloads the target session, removes its exact JSONL persistence directory, detaches it from workspaces, and synchronizes the lists incrementally | On |
+| Model capabilities | Settings → Models → Model capabilities | Configure image support, selectable thinking types and parameter formats per model | On |
 
-All three switches live under **Settings → Plugins → Plugin configuration → DSH More** and take effect without rebuilding the plugin.
+Patch switches live under **Settings → Plugins → Plugin configuration → DSH More** and take effect without rebuilding the plugin.
 
 ## Installation
 
@@ -131,16 +132,23 @@ After confirmation, DSH More cancels a running task, waits for idle, flushes the
 
 > **Irreversible:** permanent deletion does not archive the session and does not move it into a DSH More trash directory.
 
-### Configure model reasoning effort
+### Configure model capabilities
 
-Open **Settings → Models**, expand a provider with **Edit**, and every model entry in the model catalog carries its own **Thinking effort** button:
+Open **Settings → Models**, expand a saved provider with **Edit**, and click **Model capabilities** below a model:
 
-1. Click a model's **Thinking effort**; in the dialog, check the levels the model offers (off / minimal / low / medium / high / xhigh / max) and, for each enabled level, fill in the wire spelling sent to the gateway (defaults to the level name); `off` needs no wire value — "supported, send nothing".
-2. Click **Save**. The change is written to `reasoningEfforts` under `llm-pi-ai.providers.<route>.models[]` in `settings.yaml`, and the composer's model picker immediately offers those levels.
+1. **Vision**: inherit defaults, support images, or accept text only.
+2. **Thinking types**: inherit defaults, disable reasoning, or choose supported levels (off / minimal / low / medium / high / xhigh / max) and their API parameter values.
+3. **Thinking parameter format**: expand the advanced option to select an installed DSH format such as OpenAI, DeepSeek, Qwen or OpenRouter. This applies to OpenAI Completions compatible interfaces; other protocols use native dispatch.
 
-You can also check **This model does not reason** (writes `reasoningEfforts: false`) or use **Clear** to drop the field and fall back to the installed catalog. Only `off` may leave its wire value empty, and at least one non-`off` level is required — the same rules the pi-ai adapter enforces when resolving a route. Invalid configurations are rejected before any write, so a bad save never corrupts `settings.yaml`.
+**Save** writes the model's `input` (`[text, image]` or `[text]`), `reasoningEfforts`, and `compat.thinkingFormat` under `llm-pi-ai.providers.<route>.models[]` in `settings.yaml`. DSH applies the changes through its live settings mechanism.
 
-**Auto-fill:** models added via **Fetch available models** carry no `reasoningEfforts`, which the adapter treats as non-reasoning. After the provider is saved, this patch auto-fills the default `{ low, medium, high }` onto any model that has no `reasoningEfforts`, so a freshly fetched model can think immediately. To keep a model non-reasoning, set it to `reasoningEfforts: false` (explicit `false` is never auto-filled). The default levels can then be tuned per model from the thinking-effort button.
+Each setting independently offers **Inherit defaults**, removing that model declaration and using DSH's catalog, provider configuration or adapter defaults. Missing declarations do not prove support: unknown models normally default to text input with no selectable thinking levels. A custom reasoning list needs at least one non-off level. The off parameter may be blank or use an explicit API value.
+
+This replaces the old model reasoning effort patch and **never auto-fills low / medium / high**. Existing model declarations remain editable: the old patch recorded no provenance, so upgrades cannot distinguish automatically filled levels from deliberate configuration. Disabling the patch removes its controls. Native vision declarations and pi-ai settings remain effective; native DeepSeek per-model reasoning restrictions require this patch to stay enabled.
+
+Writes carry the revision read when the dialog opens. Concurrent changes cause a conflict instead of an overwrite; reopen the dialog to retry. Save new models in the provider editor first. Native DeepSeek is also supported: image input is stored in `llm-deepseek.models[].inputModalities`; per-model thinking declarations use the model's `reasoningEfforts` extension field, applied by this patch to selectors and requests. Native thinking levels are fixed to off / low / high / max; a deployment-wide disabled policy remains authoritative.
+
+If the dialog reports incompatible frontend and backend versions, restart DSH and refresh the page. Rebuilding or refreshing only the frontend cannot replace a Host module already loaded in memory. An incompatible response disables saving and shows an explicit diagnostic.
 
 ## Architecture
 

@@ -1,0 +1,9 @@
+{
+  "id": "projectless-tasks",
+  "name": "独立任务",
+  "description": "在工作区下拉框选择独立任务，或清除已选目录切换，保留草稿并自动使用独立目录",
+  "defaultEnabled": true,
+  "order": 700,
+  "host": "./host/index.ts",
+  "client": { "kind": "standalone", "entry": "./client/index.tsx" }
+}

@@ -1,6 +1,8 @@
 import { DshMoreError } from '../../../platform/dsh/host/error.js'
 import {
   THINKING_LEVELS,
+  THINKING_FORMATS,
+  type ModelCapabilities,
   type ModelReasoningEfforts,
   type ThinkingLevel,
 } from '../shared.js'
@@ -10,7 +12,7 @@ const LEVEL_SET = new Set<string>(THINKING_LEVELS)
 /**
  * Validate a client-supplied `reasoningEfforts` payload, mirroring the
  * pi-ai profile rules the adapter enforces when it resolves a route:
- * - `null`/`undefined` means "clear" (fall back to the installed catalog).
+ * - `null` means "clear" (fall back to DSH defaults).
  * - `false` means "this model does not reason".
  * - otherwise a dict whose keys are known levels, whose non-`off` values are
  *   non-empty wire spellings, and which offers at least one level beyond `off`.
@@ -19,7 +21,7 @@ const LEVEL_SET = new Set<string>(THINKING_LEVELS)
  * otherwise store a profile the adapter would refuse on its next resolution.
  */
 export function validateReasoningEfforts(raw: unknown): ModelReasoningEfforts | null {
-  if (raw === null || raw === undefined) return null
+  if (raw === null) return null
   if (raw === false) return false
   if (typeof raw !== 'object' || Array.isArray(raw)) {
     throw new DshMoreError('bad-request', 'reasoningEfforts 必须是 false、思考级别字典或 null。')
@@ -45,4 +47,19 @@ export function validateReasoningEfforts(raw: unknown): ModelReasoningEfforts | 
   }
   if (!offersThinking) throw new DshMoreError('bad-request', '需要至少声明一个非 off 的思考级别。')
   return result as ModelReasoningEfforts
+}
+
+export function validateCapabilities(raw: Record<string, unknown>): ModelCapabilities {
+  const { vision, thinkingFormat } = raw
+  if (vision !== null && typeof vision !== 'boolean') {
+    throw new DshMoreError('bad-request', '请选择识图能力：沿用默认、支持或不支持。')
+  }
+  if (thinkingFormat !== null && !THINKING_FORMATS.some((format) => format === thinkingFormat)) {
+    throw new DshMoreError('bad-request', '请选择 DSH 支持的思考参数格式。')
+  }
+  return {
+    vision,
+    reasoningEfforts: validateReasoningEfforts(raw.reasoningEfforts),
+    thinkingFormat: thinkingFormat as ModelCapabilities['thinkingFormat'],
+  }
 }
