@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { SessionInput, InputState, DraftAttachmentId } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { InputState, DraftAttachmentId } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { transferBeforeOpen, transferDraft } from './client/draft.js'
 
 function draft(text: string, imageIds: string[] = [], phase: InputState['phase'] = 'plain') {
@@ -12,7 +12,6 @@ function draft(text: string, imageIds: string[] = [], phase: InputState['phase']
     removeImage: vi.fn((id: DraftAttachmentId) => { data = { ...data, imageIds: data.imageIds.filter((item) => item !== id) } }),
   }
 }
-const asDraft = (value: ReturnType<typeof draft>): Pick<SessionInput, 'state' | 'setDraft' | 'addImages' | 'removeImage'> => value as never
 
 describe('workspace to independent draft handoff', () => {
   function attachmentDraft(text: string, ids: string[] = []) {
@@ -43,11 +42,11 @@ describe('workspace to independent draft handoff', () => {
   it('moves text and image references after target admission', () => {
     const source = draft('未发送的需求 @设计图', ['image-1', 'image-2'])
     const target = draft('')
-    transferDraft(asDraft(source), asDraft(target))
+    transferDraft(source, target)
     expect(target.state.getSnapshot()).toMatchObject({ draft: '未发送的需求 @设计图', imageIds: ['image-1', 'image-2'] })
     expect(source.state.getSnapshot()).toMatchObject({ draft: '', imageIds: [] })
     expect(target.addImages.mock.invocationCallOrder[0]).toBeLessThan(source.setDraft.mock.invocationCallOrder[0]!)
-    transferDraft(asDraft(source), asDraft(target))
+    transferDraft(source, target)
     expect(target.state.getSnapshot().draft).toBe('未发送的需求 @设计图')
   })
 
@@ -55,7 +54,7 @@ describe('workspace to independent draft handoff', () => {
     const source = draft('保留我', ['image'])
     const target = draft('')
     target.addImages.mockReturnValueOnce(false)
-    expect(() => transferDraft(asDraft(source), asDraft(target))).toThrow('原草稿已保留')
+    expect(() => transferDraft(source, target)).toThrow('原草稿已保留')
     expect(source.state.getSnapshot()).toMatchObject({ draft: '保留我', imageIds: ['image'] })
     expect(source.setDraft).not.toHaveBeenCalled()
     expect(source.removeImage).not.toHaveBeenCalled()
@@ -65,9 +64,9 @@ describe('workspace to independent draft handoff', () => {
   it('rejects active submission and conflicting target drafts without overwriting them', () => {
     const source = draft('原草稿')
     const target = draft('其他草稿')
-    expect(() => transferDraft(asDraft(source), asDraft(target))).toThrow('其他草稿')
+    expect(() => transferDraft(source, target)).toThrow('其他草稿')
     expect(target.setDraft).not.toHaveBeenCalled()
-    expect(() => transferDraft(asDraft(draft('原草稿', [], 'submitting')), asDraft(draft('')))).toThrow('输入正在处理中')
+    expect(() => transferDraft(draft('原草稿', [], 'submitting'), draft(''))).toThrow('输入正在处理中')
   })
 
   it('does not navigate after the user selects another session, or migrate a started session', () => {

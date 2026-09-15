@@ -38,19 +38,19 @@ export function unlockComposer(owner: ComposerBarOwnerProps, independent: boolea
 }
 
 /**
- * DSH 0.1.2-rc.1 compatibility seam. Keep the native registration identity,
+ * Keep the native conversation registration identity,
  * children, stores and render authorizations; adapt only its owner props.
  * A dormant fallback registration invalidates the public slot subscription
  * on install/uninstall, including an already mounted Web client.
  */
 // 0.1.5 renamed the shell slot; owner props and registration contract remain compatible.
-// Cast only the name at the 0.1.2 type boundary, never the registration or its stores.
+// Cast only the legacy name at the 0.1.5 type boundary, never the registration or its stores.
 export const CONVERSATION_SLOTS = ['conversation', 'main.conversation'] as const
-export function conversationSlot(name: typeof CONVERSATION_SLOTS[number]): 'conversation' {
-  return name as 'conversation'
+export function conversationSlot(name: typeof CONVERSATION_SLOTS[number]): 'main.conversation' {
+  return name as 'main.conversation'
 }
 
-export function installConversationAdapter(ctx: Context, activation: PatchActivationSource, name: typeof CONVERSATION_SLOTS[number] = 'conversation'): () => void {
+export function installConversationAdapter(ctx: Context, activation: PatchActivationSource, name: typeof CONVERSATION_SLOTS[number] = 'main.conversation'): () => void {
   const slot = conversationSlot(name)
   const wrapped = new Map<StoredEntry, { original: unknown; component: ComponentType<ConversationSlotProps> }>()
   let live = true

@@ -12,7 +12,7 @@
 
 - Node.js `22.19.x` 或 `>= 24`；
 - pnpm；
-- 与项目当前依赖匹配的 DSH。本版本面向 DSH `0.1.2-rc.1`。
+- 与项目当前依赖匹配的 DSH。本版本以 `0.1.5-rc.2` 为验证基线，依赖范围为 `^0.1.5-rc.2`。
 
 首次检出后执行：
 
@@ -316,11 +316,13 @@ pnpm run release -- --otp=123456
 优先使用现有依赖和平台适配层。确实需要新增时：
 
 - 只在构建或测试中使用的包放入 `devDependencies`；
-- 运行时由 DSH 提供的外部包放入 `peerDependencies`，并在 `devDependencies` 固定本地开发版本；
+- 运行时由 DSH 提供的外部包放入 `peerDependencies`，并在 `devDependencies` 使用相同的兼容版本范围（例如 `^0.1.5-rc.2`），不固定单一版本；
 - Client bundle 真正产生外部 `require()` 时，将对应模块加入 `dsh.client.inject`；
 - 只用于 TypeScript module augmentation、且不会出现在发布声明或运行时 bundle 中的包，可以仅作为开发依赖；
-- 同步 `pnpm-lock.yaml`；本仓库不维护并行的 `package-lock.json`；
+- 保留并同步 `pnpm-lock.yaml` 记录已验证的解析结果；CI 使用 `--frozen-lockfile`。需要更新范围内版本时运行 `pnpm update`，然后执行完整检查；本仓库不维护并行的 `package-lock.json`；
 - 不要为了一个很小的 helper 引入大型依赖。
+
+DSH 当前使用 `^0.1.5-rc.2`：接受后续 `0.1.x` 正式版本和同一 `0.1.5` 基线的更新 RC，不自动跨入 `0.2`，也不接受其他版本基线的预发布包。不要用各子包的 `latest` 标签做批量升级；上游子包标签并不总是与 CLI 对齐。JSONL 后端仅作为开发依赖，用于真实存储兼容性测试。
 
 更新锁文件后再次运行完整检查，并在变更说明中写明依赖的用途。
 

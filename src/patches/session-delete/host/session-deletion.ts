@@ -98,10 +98,18 @@ export async function deleteSessionPermanently(ctx: Context, rawSessionId: strin
     .find((candidate) => candidate.id === sessionId) ?? live?.header
   if (header === undefined) throw new DshMoreError('not-found', '会话记录不存在。', 404)
 
-  // Still supplied by the JSONL backend in 0.1.5, but no longer on every backend.
-  const location = typeof ctx.sessionPersistence.locate === 'function' ? ctx.sessionPersistence.locate(header) : undefined
+  // JSONL 0.1.5 retains locate as a private diagnostics hook, not a service API.
+  // Probe this optional backend capability and validate its result before disk access.
+  const persistence = ctx.sessionPersistence
+  const location: unknown = 'locate' in persistence && typeof persistence.locate === 'function'
+    ? persistence.locate(header) : undefined
   if (location === undefined) {
     throw new DshMoreError('internal', '当前持久化后端不支持逐会话物理删除。', 409)
+  }
+  if (typeof location !== 'object' || location === null
+    || !('kind' in location) || typeof location.kind !== 'string'
+    || !('path' in location) || typeof location.path !== 'string') {
+    throw new DshMoreError('internal', '持久化后端返回了无效的会话位置。', 500)
   }
   if (location.kind !== 'jsonl') {
     throw new DshMoreError('internal', `持久化后端 ${location.kind} 不支持安全的逐目录删除。`, 409)

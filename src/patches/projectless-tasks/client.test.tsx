@@ -49,13 +49,13 @@ describe('native composer compatibility', () => {
     expect(clientSessionActions({ sessions } as never)).toBe(sessions)
   })
 
-  async function harness(name: 'conversation' | 'main.conversation' = 'conversation') {
+  async function harness(name: 'conversation' | 'main.conversation' = 'main.conversation') {
     const slot = conversationSlot(name)
     const slots = new SlotCore()
     const state = activation()
     const native = vi.fn((props: PropsRenderSlots<'conversation.composer.bar'>) => <>{props.renderSlot('conversation.composer.bar', gated)}</>)
     slots.register({ name: 'root', children: { [slot]: { kind: 'single', scope: 'session-maybe' } } },
-      (props: PropsRenderSlots<'conversation'>) => props.renderSlot(slot, {}))
+      (props: PropsRenderSlots<'main.conversation'>) => props.renderSlot(slot, {}))
     slots.register({ name: slot, children: { 'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' } } }, native)
     const originalEntry = slots.entries(slot)[0]!
     const dispose = installConversationAdapter({ slots } as never, state, name)

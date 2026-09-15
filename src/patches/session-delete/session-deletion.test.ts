@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { SessionId, type Session } from '@deepseek-ai/dsh-session'
+import { SessionId, Session } from '@deepseek-ai/dsh-session'
+import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { DshMoreError } from '../../platform/dsh/host/error.js'
 import { deleteSessionPermanently } from './host/session-deletion.js'
 import { installLiveSessionHandleTracker } from './host/live-session-handles.js'
+import { addTurn } from '../../../test/helpers/session.js'
 
 const roots: string[] = []
 afterEach(async () => {
@@ -38,6 +40,50 @@ async function fixture(artifact = 'session.jsonl'): Promise<{
 }
 
 describe('permanent session deletion', () => {
+  it.each(['none', 'zstd'] as const)('deletes a cold session using the native JSONL backend (%s)', async (compression) => {
+    const root = await mkdtemp(join(tmpdir(), 'dshmore-native-delete-'))
+    roots.push(root)
+    const owner = new Context()
+    const backend = await owner.plugin(JsonlSessionPersistence, { root, compression })
+    const persistence = owner.sessionPersistence
+    const session = Session.create(SessionId('native-delete-session'))
+    const neighbor = Session.create(SessionId('native-keep-session'))
+    try {
+      for (const item of [session, neighbor]) {
+        const writer = await persistence.create(item.header)
+        try {
+          addTurn(item, 1, 'persist this session')
+          await writer.append(item.snapshotEvents())
+          await writer.flush()
+        } finally {
+          await writer.close()
+        }
+      }
+      expect((await persistence.list()).map((item) => item.header.id)).toContain(session.id)
+      const ctx = {
+        sessions: { get: () => undefined },
+        agents: { get: () => undefined },
+        sessionPersistence: persistence,
+        workspaceRegistry: { list: () => [] },
+      } as unknown as Context
+      await expect(deleteSessionPermanently(ctx, session.id)).resolves.toEqual({ sessionId: session.id })
+      await expect(persistence.stat(session.id)).resolves.toBeUndefined()
+      expect((await persistence.list()).map((item) => item.header.id)).toEqual([neighbor.id])
+    } finally {
+      await backend.dispose()
+    }
+  })
+
+  it.each([null, {}, { kind: 'jsonl', path: 42 }])('rejects a malformed backend location before unloading', async (location) => {
+    const { sessionId, sessionDir, header } = await fixture()
+    const ctx = {
+      sessions: { get: () => ({ header }) },
+      sessionPersistence: { list: async () => [{ header }], locate: () => location },
+    } as unknown as Context
+    await expect(deleteSessionPermanently(ctx, sessionId)).rejects.toMatchObject({ status: 500 })
+    await expect(stat(sessionDir)).resolves.toMatchObject({})
+  })
+
   it.each([
     { snapshot: false, artifact: 'session.jsonl' },
     { snapshot: true, artifact: 'session.jsonl' },

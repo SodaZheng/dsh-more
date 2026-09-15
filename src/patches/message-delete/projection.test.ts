@@ -21,7 +21,7 @@ function deletionEvent(seq: number, deletedSeqs: number[], plugin = 'dsh-more'):
         deletedSeqs,
       },
     },
-    surfaceOp: { op: 'replace', start: deletedSeqs[0] as number, end: deletedSeqs.at(-1) as number },
+    surfaceOp: { op: 'replace', startSeq: deletedSeqs[0] as number, endSeq: deletedSeqs.at(-1) as number },
     sourceEventSeqs: deletedSeqs,
   } as unknown as SessionEvent
 }
@@ -56,7 +56,7 @@ describe('message-delete projection', () => {
           },
         },
       },
-      surfaceOp: { op: 'replace', start: 4, end: 4 },
+      surfaceOp: { op: 'replace', startSeq: 4, endSeq: 4 },
       sourceEventSeqs: [4],
     } as unknown as SessionEvent
     expect(messageDeleteProjection.apply(messageDeleteProjection.init(), event)).toEqual({
@@ -66,7 +66,7 @@ describe('message-delete projection', () => {
   })
 })
 
-describe('message-delete rc.1 projection registry', () => {
+describe('message-delete projection registry', () => {
   it('publishes the wire view, checkpoints host state, and removes the capability on disposal', () => {
     const session = Session.create(SessionId('session-projection-registry'))
     const original = session.append('user/message', createUserMessage({
@@ -75,7 +75,7 @@ describe('message-delete rc.1 projection registry', () => {
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'deleted' }],
       source: { kind: 'plugin', plugin: 'dsh-more', operation: 'delete-message', deletedSeqs: [original.seq] },
-    }), { surfaceOp: { op: 'replace', start: original.seq, end: original.seq }, sourceEventSeqs: [original.seq] })
+    }), { surfaceOp: { op: 'replace', startSeq: original.seq, endSeq: original.seq }, sourceEventSeqs: [original.seq] })
     const registry = new SessionProjectionRegistry(new Context())
     const dispose = registry.register(messageDeleteProjection)
     try {

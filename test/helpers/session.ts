@@ -12,6 +12,7 @@ export function addTurn(session: Session, turn: number, prompt: string): {
     source: { kind: 'user' },
   }), { surfaceOp: 'append' })
   const assistant = session.append('assistant/message', {
+    stream: [],
     turn,
     step: 1,
     message: createAssistantMessage({

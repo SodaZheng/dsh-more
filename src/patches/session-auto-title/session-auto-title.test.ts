@@ -114,7 +114,7 @@ describe('native title service integration', () => {
       } else yield* response()
     })
     prompt(session)
-    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' }, tools: [] }, reason: 'initial' })
+    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' } }, reason: 'initial' })
     await vi.waitFor(() => expect(ctx.sessionTitle.get(session)?.title).toBe('修复 · 会话切换时页面闪烁'), { timeout: 4000 })
     expect(calls).toBe(2)
   })
@@ -127,7 +127,7 @@ describe('native title service integration', () => {
       return response()
     }, { efforts: [{ id: ReasoningEffortId('low'), name: 'Low' }, { id: ReasoningEffortId('high'), name: 'High' }] })
     prompt(session)
-    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' }, tools: [] }, reason: 'initial' })
+    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' } }, reason: 'initial' })
     await vi.waitFor(() => expect(ctx.sessionTitle.get(session)?.title).toBe('修复 · 会话切换时页面闪烁'))
     expect(calls).toHaveLength(1)
     expect(calls[0]?.reasoningEffort).toBe('low')
@@ -152,7 +152,7 @@ describe('native title service integration', () => {
     const firstChunk = main.next()
     try {
       await vi.waitFor(() => expect(mainStarted).toBe(true))
-      session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' }, tools: [] }, reason: 'initial' })
+      session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' } }, reason: 'initial' })
       await vi.waitFor(() => expect(ctx.sessionTitle.get(session)?.title).toBe('修复 · 会话切换时页面闪烁'))
       expect(mainFinished).toBe(false)
     } finally {
@@ -166,7 +166,7 @@ describe('native title service integration', () => {
     const stream = vi.fn(() => response())
     const { ctx, session } = await fixture(stream)
     prompt(session)
-    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' }, tools: [] }, reason: 'initial' })
+    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' } }, reason: 'initial' })
     await vi.waitFor(() => expect(ctx.sessionTitle.get(session)?.title).toBe('修复 · 会话切换时页面闪烁'))
     expect(ctx.sessionProjections.stateOf(session, 'title')).toBe('修复 · 会话切换时页面闪烁')
     prompt(session, '再加一个测试')
@@ -180,7 +180,7 @@ describe('native title service integration', () => {
 
   it('preserves the fallback on malformed output', async () => {
     const { ctx, session } = await fixture(() => response('不符合格式'))
-    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' }, tools: [] }, reason: 'initial' })
+    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' } }, reason: 'initial' })
     prompt(session)
     await expect(ctx.sessionTitle.refresh(session)).rejects.toThrow('标题格式无效')
     expect(ctx.sessionTitle.get(session)?.source.kind).toBe('fallback')
@@ -194,7 +194,7 @@ describe('native title service integration', () => {
       budgets.push(options.maxTokens)
       return response()
     })
-    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' }, tools: [] }, reason: 'initial' })
+    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' } }, reason: 'initial' })
     prompt(session)
     await ctx.sessionTitle.refresh(session)
     expect(prompts).toHaveLength(1)
@@ -220,7 +220,7 @@ describe('native title service integration', () => {
       await gate
       yield* response()
     })
-    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' }, tools: [] }, reason: 'initial' })
+    session.append('request/header', { header: { config: { provider: 'test', model: 'test-model' } }, reason: 'initial' })
     prompt(session)
     const generation = ctx.sessionTitle.refresh(session)
     const rejected = expect(generation).rejects.toThrow()

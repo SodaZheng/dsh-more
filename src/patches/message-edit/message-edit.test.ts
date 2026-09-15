@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
@@ -63,7 +63,7 @@ describe('message-edit patch', () => {
       sessionProjections: { stateOf: () => null },
       agents: {
         create: async (options: CreateAgentOptions) => {
-          await options.setup?.(agentCtx)
+          await options.setup?.(agentCtx, { session: Session.create(options.sessionId), ctx: agentCtx } as Agent)
           return {
             agent: {
               followup: (message: ReturnType<typeof createUserMessage>) => {
@@ -151,11 +151,11 @@ describe('message-edit patch', () => {
   })
 })
 
-describe('message-edit rc.1 continuation metadata', () => {
+describe('message-edit continuation metadata', () => {
   it.each([true, false])('preserves seed ownership and the projected preset (selected: %s)', async (selected) => {
     const id = SessionId('session-edit-preset-source')
     const session = Session.create(id, undefined, {
-      version: 0, id, createdAt: 0, isSeeded: false, cwd: '/tmp', ...(selected ? { agentPreset: 'initial' } : {}),
+      version: SESSION_FORMAT_VERSION, id, createdAt: 0, isSeeded: false, cwd: '/tmp', ...(selected ? { agentPreset: 'initial' } : {}),
     })
     if (selected) {
       session.append('agent-preset/selected', { agentPreset: 'selected' })
@@ -164,7 +164,7 @@ describe('message-edit rc.1 continuation metadata', () => {
         content: [{ type: 'text', text: 'compacted context' }],
         source: { kind: 'plugin', plugin: 'test', form: 'instructions' },
       }), {
-        surfaceOp: { op: 'replace', start: SessionSeq(first.userSeq), end: SessionSeq(first.assistantSeq) },
+        surfaceOp: { op: 'replace', startSeq: SessionSeq(first.userSeq), endSeq: SessionSeq(first.assistantSeq) },
         sourceEventSeqs: [SessionSeq(first.userSeq), SessionSeq(first.assistantSeq)],
       })
       expect(session.surface.nodes).not.toContain(first.userSeq)
@@ -183,7 +183,7 @@ describe('message-edit rc.1 continuation metadata', () => {
       agents: {
         create: async (options: CreateAgentOptions) => {
           child = Session.create(childId, options.seed, {
-            version: 0, id: childId, createdAt: 1, isSeeded: false, ...options.meta,
+            version: SESSION_FORMAT_VERSION, id: childId, createdAt: 1, isSeeded: false, ...options.meta,
           }, options.inheritedEventCount)
           return { agent: { id: childId, followup: () => undefined, whenIdle: async () => undefined }, dispose: async () => undefined }
         },

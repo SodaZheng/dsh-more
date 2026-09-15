@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import { ToolCallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
@@ -14,7 +14,7 @@ describe('message-delete patch', () => {
   it('preserves retained assistant streams and interruption metadata when renumbering history', () => {
     const session = Session.create(SessionId('session-delete-stream'))
     const first = addTurn(session, 1, 'remove this answer')
-    const stream = [{ type: 'text-chunks', time0: 100, index: 0, dt: [0], texts: ['retained answer'] }]
+    const stream = [{ type: 'text-chunks' as const, time0: 100, index: 0, dt: [0], texts: ['retained answer'] }]
     session.append('turn/start', { turn: 2 })
     session.append('step/start', { turn: 2, step: 3 })
     const data = {
@@ -83,7 +83,7 @@ describe('message-delete patch', () => {
       sessionProjections: { stateOf: () => null },
       agents: {
         create: async (options: CreateAgentOptions) => {
-          await options.setup?.(agentCtx)
+          await options.setup?.(agentCtx, { session: Session.create(options.sessionId), ctx: agentCtx } as Agent)
           return { agent: {}, dispose: async () => undefined }
         },
       },
@@ -199,10 +199,13 @@ describe('message-delete patch', () => {
         deletedSeqs: [first.assistantSeq],
       },
     }), {
-      surfaceOp: { op: 'replace', start: SessionSeq(first.assistantSeq), end: SessionSeq(first.assistantSeq) },
+      surfaceOp: { op: 'replace', startSeq: SessionSeq(first.assistantSeq), endSeq: SessionSeq(first.assistantSeq) },
       sourceEventSeqs: [SessionSeq(first.assistantSeq)],
     })
+    // Current DSH assistant records embed streams and cannot cite replaced nodes.
+    // Keep the old cleanup metadata in a valid appended record.
     session.append('assistant/message', {
+      stream: [],
       turn: 1,
       step: 1,
       message: createAssistantMessage({
@@ -219,10 +222,7 @@ describe('message-delete patch', () => {
           },
         },
       }),
-    }, {
-      surfaceOp: { op: 'replace', start: marker.seq, end: marker.seq },
-      sourceEventSeqs: [marker.seq],
-    })
+    }, { surfaceOp: 'append' })
     const clean = Session.create(
       SessionId('session-test-clean-child'),
       buildCleanSeed(session, selectMessageDeletion(session, second.assistantSeq)),
@@ -243,6 +243,7 @@ describe('message-delete patch', () => {
     session.append('step/start', { turn: 1, step: 1 })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'use tool' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     session.append('assistant/message', {
+      stream: [],
       turn: 1,
       step: 1,
       message: createAssistantMessage({
@@ -259,6 +260,7 @@ describe('message-delete patch', () => {
     session.append('step/end', { turn: 1, step: 1 })
     session.append('step/start', { turn: 1, step: 2 })
     const final = session.append('assistant/message', {
+      stream: [],
       turn: 1,
       step: 2,
       message: createAssistantMessage({ content: [{ type: 'text', text: 'final answer' }], source: { provider: 'test', model: 'test' } }),
@@ -274,11 +276,11 @@ describe('message-delete patch', () => {
   })
 })
 
-describe('message-delete rc.1 continuation metadata', () => {
+describe('message-delete continuation metadata', () => {
   it.each([true, false])('preserves seed ownership and the projected preset (selected: %s)', async (selected) => {
     const id = SessionId('session-delete-preset-source')
     const session = Session.create(id, undefined, {
-      version: 0, id, createdAt: 0, isSeeded: false, cwd: '/tmp', ...(selected ? { agentPreset: 'initial' } : {}),
+      version: SESSION_FORMAT_VERSION, id, createdAt: 0, isSeeded: false, cwd: '/tmp', ...(selected ? { agentPreset: 'initial' } : {}),
     })
     if (selected) {
       session.append('agent-preset/selected', { agentPreset: 'selected' })
@@ -297,7 +299,7 @@ describe('message-delete rc.1 continuation metadata', () => {
       agents: {
         create: async (options: CreateAgentOptions) => {
           child = Session.create(childId, options.seed, {
-            version: 0, id: childId, createdAt: 1, isSeeded: false, ...options.meta,
+            version: SESSION_FORMAT_VERSION, id: childId, createdAt: 1, isSeeded: false, ...options.meta,
           }, options.inheritedEventCount)
           return { agent: { id: childId, followup: () => undefined, whenIdle: async () => undefined }, dispose: async () => undefined }
         },
@@ -327,6 +329,7 @@ describe('message-delete tool selection', () => {
     session.append('turn/start', { turn: 1 })
     session.append('step/start', { turn: 1, step: 1 })
     const assistant = session.append('assistant/message', {
+      stream: [],
       turn: 1, step: 1,
       message: createAssistantMessage({
         content: ids.map((id) => ({ type: 'tool-call', id, name: 'demo', arguments: '{}' })),

@@ -6,7 +6,7 @@ Practical, independently switchable patches for missing context and history cont
 
 `dsh-more` integrates with the existing DSH interface instead of adding a separate management dashboard. Its current patch set can edit a user message and restart from that point, remove one message while preserving the surrounding context, and permanently delete a session while leaving native archive behavior intact.
 
-> **Compatibility:** the current release targets DeepSeek Harness `0.1.2-rc.1` and requires Node.js `>= 24`. DSH is still a release candidate, so upgrades may require changes in the centralized adapter layer described below.
+> **Compatibility:** the current release targets DeepSeek Harness `0.1.5-rc.2` and requires Node.js `>= 24`. DSH is still a release candidate, so upgrades may require changes in the centralized adapter layer described below.
 
 ## Features
 
@@ -24,7 +24,7 @@ Patch switches live under **Settings → Plugins → Plugin configuration → DS
 ### Requirements
 
 - Node.js `>= 24`
-- A working `dsh` CLI and a Web profile compatible with DSH `0.1.2-rc.1`
+- A working `dsh` CLI and a Web profile compatible with DSH `0.1.5-rc.2`
 - Access to the npm registry that publishes `dsh-more`
 
 pnpm is needed only when installing or developing from source. For a published release, use the DSH plugin command so the package is installed into the selected DSH profile; do not install it globally with `npm install -g`.
@@ -233,6 +233,17 @@ pnpm run package        # Build and create the npm tarball
 
 Generated source, `dist/`, and tarballs are not committed. `prepack` runs the complete check before `npm pack` or `npm publish`.
 
+### Dependency updates
+
+`package.json` uses compatible version ranges so installs and updates can resolve newer versions within those ranges. `pnpm-lock.yaml` preserves reproducible builds; a normal install keeps already locked versions. To refresh dependencies and validate them:
+
+```sh
+pnpm update
+pnpm run check
+```
+
+The DSH range `^0.1.5-rc.2` accepts later stable `0.1.x` releases and newer `0.1.5` RCs. It does not cross into `0.2` or include alpha/RC releases with a different version tuple.
+
 ### Verification scope
 
 Automated tests cover patch registry alignment, independent activation/disposal, Settings projection, mutation trust checks, confirmation expiry/tampering/staleness, message selection and clean rebuilds, runtime-context continuity, and cold/live session deletion.
@@ -241,13 +252,13 @@ The repository does not currently contain a full browser end-to-end suite agains
 
 ## Compatibility notes
 
-This update migrates to the split Client services, `useChat` snapshots, settings registration, and session projection APIs, and updates message action row targeting. Dependencies and the lockfile target `0.1.2-rc.1` without the retired `dsh-client-runtime`. For an existing local linked install, rebuild, restart DSH, and reload the page to load both the new Host and Client.
+Development and host dependency ranges use `^0.1.5-rc.2`; the lockfile records the versions currently verified. The adapters and tests cover the current session format, message provenance, `main.conversation` slot, and JSONL persistence snapshots and location capability. For an existing local linked install, rebuild, restart DSH, and reload the page to load both the new Host and Client.
 
-- The current dependency set targets DSH `0.1.2-rc.1`; pre-release API or DOM changes can require adapter updates.
+- The current dependency set targets DSH `0.1.5-rc.2`; pre-release API or DOM changes can require adapter updates.
 - In-product DSH More copy is currently primarily Simplified Chinese, although native Copy/Archive selectors recognize both Chinese and English labels.
 - Message actions operate only on ordinary user messages and assistant messages still present in the current model surface; editing requires a completed owning turn.
-- Permanent deletion supports DSH persistence locations of kind `jsonl` only.
-- Unloading a live session prefers tracked public Agent handles. An already-live untracked session uses a guarded compatibility path for the current DSH registry internals, so this path deserves special review on DSH upgrades.
+- Permanent deletion requires a `jsonl` backend with a valid location capability. Its current `locate` hook is internal; the adapter checks its presence and result. Tests cover plain and Zstandard-compressed session files.
+- Unloading a live session uses tracked public Agent handles. With handle-based persistence, deletion refuses an already-live session whose Agent handle was not tracked and asks for a DSH restart, preserving write ownership and file locks.
 
 ## License
 
