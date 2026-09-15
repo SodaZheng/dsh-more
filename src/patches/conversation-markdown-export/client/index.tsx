@@ -11,11 +11,13 @@ import { apiErrorText, callPatchBlobApi } from '../../../platform/dsh/client/api
 import { PLUGIN_NAME } from '../../../platform/dsh/identity.js'
 import { CONVERSATION_MARKDOWN_EXPORT_PATCH_ID } from '../shared.js'
 import { markdownFilename } from './filename.js'
+import { installMarkdownExportMenu } from './menu.js'
 
 type HeaderUtilityProps = PropsRuntime<'conversation.session.header.utilities'>
 
 const exportStyles = `
 .dshmore-markdown-export-button { box-sizing: border-box; min-width: 128px; height: 32px; color: var(--dsw-alias-label-primary); cursor: pointer; background: transparent; border: 1px solid var(--dsw-alias-border-l2); border-radius: 18px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 12px; font-family: var(--dsw-font-family); font-size: 13px; line-height: 20px; }
+.dshmore-markdown-export-button[hidden] { display: none; }
 .dshmore-markdown-export-button:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .dshmore-markdown-export-button:disabled { color: var(--dsw-alias-label-dimmed); cursor: wait; }
 .dshmore-markdown-export-button > span, .dshmore-markdown-export-button > svg { flex: none; }
@@ -41,17 +43,25 @@ function ConversationMarkdownExportButton(props: HeaderUtilityProps & {
   const title = props.useSessions((state) => state.byId[props.sessionId]?.displayTitle ?? String(props.sessionId))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const inFlight = useRef(false)
   const generation = useRef(0)
   const activeSession = useRef<string | null>(null)
   activeSession.current = enabled ? String(props.sessionId) : null
 
   useEffect(() => {
     generation.current += 1
+    inFlight.current = false
     setBusy(false)
     setError(null)
+    return () => {
+      generation.current += 1
+    }
   }, [enabled, props.sessionId])
 
   const download = async (): Promise<void> => {
+    if (inFlight.current) return
+    inFlight.current = true
     const requestSessionId = String(props.sessionId)
     const requestGeneration = ++generation.current
     setBusy(true)
@@ -67,15 +77,24 @@ function ConversationMarkdownExportButton(props: HeaderUtilityProps & {
     } catch (caught) {
       if (generation.current === requestGeneration && activeSession.current === requestSessionId) setError(apiErrorText(caught))
     } finally {
-      if (generation.current === requestGeneration && activeSession.current === requestSessionId) setBusy(false)
+      if (generation.current === requestGeneration && activeSession.current === requestSessionId) {
+        inFlight.current = false
+        setBusy(false)
+      }
     }
   }
+
+  useEffect(() => {
+    if (!enabled || button.current === null) return
+    return installMarkdownExportMenu(button.current, { busy, download: () => { void download() } })
+  }, [enabled, props.sessionId, title, busy])
 
   if (!enabled) return null
   return (
     <>
       <style>{exportStyles}</style>
       <button
+        ref={button}
         type="button"
         className="dshmore-markdown-export-button"
         disabled={busy}

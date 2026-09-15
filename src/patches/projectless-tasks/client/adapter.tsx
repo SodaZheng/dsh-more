@@ -43,7 +43,15 @@ export function unlockComposer(owner: ComposerBarOwnerProps, independent: boolea
  * A dormant fallback registration invalidates the public slot subscription
  * on install/uninstall, including an already mounted Web client.
  */
-export function installConversationAdapter(ctx: Context, activation: PatchActivationSource): () => void {
+// 0.1.5 renamed the shell slot; owner props and registration contract remain compatible.
+// Cast only the name at the 0.1.2 type boundary, never the registration or its stores.
+export const CONVERSATION_SLOTS = ['conversation', 'main.conversation'] as const
+export function conversationSlot(name: typeof CONVERSATION_SLOTS[number]): 'conversation' {
+  return name as 'conversation'
+}
+
+export function installConversationAdapter(ctx: Context, activation: PatchActivationSource, name: typeof CONVERSATION_SLOTS[number] = 'conversation'): () => void {
+  const slot = conversationSlot(name)
   const wrapped = new Map<StoredEntry, { original: unknown; component: ComponentType<ConversationSlotProps> }>()
   let live = true
   const listeners = new Set<() => void>()
@@ -52,7 +60,7 @@ export function installConversationAdapter(ctx: Context, activation: PatchActiva
     return () => { listeners.delete(listener) }
   }
   const sync = (): void => {
-    for (const entry of ctx.slots.entries('conversation')) {
+    for (const entry of ctx.slots.entries(slot)) {
       if (wrapped.has(entry) || entry.children?.['conversation.composer.bar'] === undefined || typeof entry.component !== 'function') continue
       const original = entry.component as ComponentType<ConversationSlotProps>
       function ProjectlessConversation(props: ConversationSlotProps): JSX.Element {
@@ -102,10 +110,10 @@ export function installConversationAdapter(ctx: Context, activation: PatchActiva
       entry.component = ProjectlessConversation
     }
   }
-  const unsubscribe = ctx.slots.subscribe('conversation', sync)
+  const unsubscribe = ctx.slots.subscribe(slot, sync)
   sync()
-  const priorities = ctx.slots.entries('conversation').map((entry) => entry.options.priority ?? 0)
-  const fallback = ctx.slots.register({ name: 'conversation', priority: Math.max(0, ...priorities) + 1 }, () => null)
+  const priorities = ctx.slots.entries(slot).map((entry) => entry.options.priority ?? 0)
+  const fallback = ctx.slots.register({ name: slot, priority: Math.max(0, ...priorities) + 1 }, () => null)
   return () => {
     live = false
     listeners.forEach((listener) => listener())

@@ -84,10 +84,11 @@ export function buildCleanSeed(source: Session, selection: MessageDeletionSelect
     }
     if (event.type === 'assistant/message') {
       rebuilt.append('assistant/message', {
+        // Keep the durable stream and settlement metadata required by DSH 0.1.5.
+        // Only the reconstructed turn/step coordinates belong to the new log.
+        ...event.data,
         turn,
         step,
-        message: event.data.message,
-        ...(event.data.usage === undefined ? {} : { usage: event.data.usage }),
       }, { surfaceOp: 'append' })
       assistantSeen = true
       for (const call of event.data.message.content) {

@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import type { HostPatch } from '../../../kernel/host/patch.js'
 import { DshMoreError } from '../../../platform/dsh/host/error.js'
 import { PROJECTLESS_TASKS_PATCH_ID, TASK_ID_PATTERN, type TaskLocation } from '../shared.js'
+import { SESSION_GROUPS_NAMESPACE } from '../groups.js'
+import { moveSessionGroup, SessionGroupsSchema } from './groups.js'
 
 /** Preparation is read-only. The native Session API owns mkdir and creation. */
 export function prepareTask(payload: unknown, homeDirectory = homedir()): TaskLocation {
@@ -16,5 +18,11 @@ export function prepareTask(payload: unknown, homeDirectory = homedir()): TaskLo
 
 export const hostPatch: HostPatch = {
   id: PROJECTLESS_TASKS_PATCH_ID,
-  routes: () => ({ prepare: (payload) => prepareTask(payload) }),
+  setup: (ctx) => {
+    const fiber = ctx.inject(['settings'], (scope) => {
+      scope.settings.register(SESSION_GROUPS_NAMESPACE, SessionGroupsSchema)
+    })
+    return () => { void fiber.dispose() }
+  },
+  routes: ({ ctx }) => ({ prepare: (payload) => prepareTask(payload), move: (payload) => moveSessionGroup(ctx, payload) }),
 }

@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
-async function fixture(): Promise<{
+async function fixture(artifact = 'session.jsonl'): Promise<{
   root: string
   sessionId: SessionId
   sessionDir: string
@@ -25,7 +25,7 @@ async function fixture(): Promise<{
   roots.push(root)
   const sessionId = SessionId('session-delete-test')
   const sessionDir = join(root, 'sessions', 'project', sessionId)
-  const logPath = join(sessionDir, 'session.jsonl')
+  const logPath = join(sessionDir, artifact)
   await mkdir(sessionDir, { recursive: true })
   await writeFile(logPath, 'test\n', 'utf8')
   return {
@@ -38,15 +38,23 @@ async function fixture(): Promise<{
 }
 
 describe('permanent session deletion', () => {
-  it('physically removes a cold session and keeps native archive semantics separate', async () => {
-    const { root, sessionId, sessionDir, logPath, header } = await fixture()
+  it.each([
+    { snapshot: false, artifact: 'session.jsonl' },
+    { snapshot: true, artifact: 'session.jsonl' },
+    { snapshot: true, artifact: 'session.v3.jsonl' },
+    { snapshot: true, artifact: 'session.v3.jsonl.zstd' },
+  ])('removes a cold session with persistence format $snapshot / $artifact', async ({ snapshot, artifact }) => {
+    const { root, sessionId, sessionDir, logPath, header } = await fixture(artifact)
     let detached: string | undefined
     const ctx = {
       sessions: { get: () => undefined },
       agents: { get: () => undefined },
       sessionPersistence: {
-        list: async () => [header],
-        locate: () => ({ kind: 'jsonl', path: logPath }),
+        list: async () => [snapshot ? { header, revision: 'revision-1' } : header],
+        locate: (candidate: unknown) => {
+          expect(candidate).toEqual(header)
+          return { kind: 'jsonl', path: logPath }
+        },
       },
       workspaceRegistry: {
         list: () => [{
@@ -63,9 +71,9 @@ describe('permanent session deletion', () => {
     expect(detached).toBe(sessionId)
   })
 
-  it('refuses an unknown artifact layout without deleting its directory', async () => {
+  it.each(['other.jsonl', 'session.v0.jsonl', 'session.v03.jsonl', 'session.v3.jsonl.tmp', 'session.v9007199254740992.jsonl'])('refuses unknown artifact %s without deleting its directory', async (artifact) => {
     const { sessionId, sessionDir, header } = await fixture()
-    const unexpectedPath = join(sessionDir, 'other.jsonl')
+    const unexpectedPath = join(sessionDir, artifact)
     await writeFile(unexpectedPath, 'test\n', 'utf8')
     const ctx = {
       sessions: { get: () => undefined },
@@ -83,8 +91,33 @@ describe('permanent session deletion', () => {
     await expect(stat(sessionDir)).resolves.toMatchObject({})
   })
 
-  it('cancels and disposes a tracked running Agent before deleting its directory', async () => {
-    const { sessionId, sessionDir, logPath, header } = await fixture()
+  it('refuses a backend without a per-session location before stopping the agent', async () => {
+    const { sessionId, sessionDir, header } = await fixture()
+    const ctx = {
+      sessions: { get: () => ({ header }) },
+      sessionPersistence: { list: async () => [{ header, revision: 'current' }] },
+    } as unknown as Context
+    await expect(deleteSessionPermanently(ctx, sessionId)).rejects.toMatchObject({ status: 409 })
+    await expect(stat(sessionDir)).resolves.toMatchObject({})
+  })
+
+  it('preserves an untracked modern writer instead of detaching it with its ownership still open', async () => {
+    const { sessionId, sessionDir, logPath, header } = await fixture('session.v3.jsonl')
+    const ctx = {
+      sessions: { get: () => ({ header }) },
+      agents: { get: () => ({ cancel: () => { throw new Error('must not cancel') } }) },
+      sessionPersistence: {
+        list: async () => [{ header, revision: 'current' }],
+        locate: () => ({ kind: 'jsonl', path: logPath }),
+        open: async () => { throw new Error('must not acquire the active writer') },
+      },
+    } as unknown as Context
+    await expect(deleteSessionPermanently(ctx, sessionId)).rejects.toMatchObject({ status: 409, code: 'session-not-live' })
+    await expect(stat(sessionDir)).resolves.toMatchObject({})
+  })
+
+  it.each([false, true])('cancels and disposes a tracked Agent (handle persistence: %s)', async (handlePersistence) => {
+    const { sessionId, sessionDir, logPath, header } = await fixture(handlePersistence ? 'session.v3.jsonl.zstd' : 'session.jsonl')
     let agentLive = true
     let sessionLive = true
     let cancelled = false
@@ -120,8 +153,9 @@ describe('permanent session deletion', () => {
         flush: async () => { flushed = true; return true },
       },
       sessionPersistence: {
-        list: async () => [header],
+        list: async () => [handlePersistence ? { header, revision: 'current' } : header],
         locate: () => ({ kind: 'jsonl', path: logPath }),
+        ...handlePersistence ? { open: async () => { throw new Error('must not reopen tracked writer') } } : {},
       },
       workspaceRegistry: {
         list: () => [{

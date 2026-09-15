@@ -11,6 +11,30 @@ import { buildCleanSeed, createDeletedContinuation } from './host/rebuild.js'
 import { addTurn, appendRuntimeContext } from '../../../test/helpers/session.js'
 
 describe('message-delete patch', () => {
+  it('preserves retained assistant streams and interruption metadata when renumbering history', () => {
+    const session = Session.create(SessionId('session-delete-stream'))
+    const first = addTurn(session, 1, 'remove this answer')
+    const stream = [{ type: 'text-chunks', time0: 100, index: 0, dt: [0], texts: ['retained answer'] }]
+    session.append('turn/start', { turn: 2 })
+    session.append('step/start', { turn: 2, step: 3 })
+    const data = {
+      turn: 2, step: 3,
+      message: createAssistantMessage({ content: [{ type: 'text', text: 'retained answer' }], source: { provider: 'test', model: 'test' } }),
+      // Required by DSH 0.1.5 readers even when usage is absent.
+      stream,
+      interrupted: true as const,
+    }
+    const retained = session.append('assistant/message', data, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 2, step: 3 })
+    session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+
+    const rebuilt = buildCleanSeed(session, selectMessageDeletion(session, first.assistantSeq))
+    const answers = rebuilt.filter((event) => event.type === 'assistant/message')
+    expect(answers).toHaveLength(1)
+    expect(answers[0]?.data).toEqual({ ...data, turn: 1, step: 1 })
+    expect(session.eventAt(retained.seq)?.data).toEqual(data)
+  })
+
   it('selects one ordinary message without widening a balanced surface', () => {
     const session = Session.create(SessionId('session-test-message'))
     const first = addTurn(session, 1, 'first')

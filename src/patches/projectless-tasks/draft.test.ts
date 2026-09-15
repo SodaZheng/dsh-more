@@ -15,6 +15,31 @@ function draft(text: string, imageIds: string[] = [], phase: InputState['phase']
 const asDraft = (value: ReturnType<typeof draft>): Pick<SessionInput, 'state' | 'setDraft' | 'addImages' | 'removeImage'> => value as never
 
 describe('workspace to independent draft handoff', () => {
+  function attachmentDraft(text: string, ids: string[] = []) {
+    const old = draft(text, ids)
+    return {
+      state: { getSnapshot: () => { const { imageIds, ...rest } = old.state.getSnapshot(); return { ...rest, attachmentIds: imageIds } } },
+      setDraft: old.setDraft, addAttachments: old.addImages, removeAttachment: old.removeImage,
+    }
+  }
+
+  it('moves modern file and image attachments and rebinds uploads before clearing the source', () => {
+    const source = attachmentDraft('带上文件', ['file-1', 'image-1'])
+    const target = attachmentDraft('')
+    const rebind = vi.fn(() => { expect(source.state.getSnapshot().draft).toBe('带上文件') })
+    transferDraft(source, target, rebind)
+    expect(rebind).toHaveBeenCalledExactlyOnceWith(['file-1', 'image-1'])
+    expect(target.state.getSnapshot()).toMatchObject({ draft: '带上文件', attachmentIds: ['file-1', 'image-1'] })
+    expect(source.state.getSnapshot()).toMatchObject({ draft: '', attachmentIds: [] })
+  })
+
+  it('keeps the modern source intact if file rebinding fails or is unavailable', () => {
+    const source = attachmentDraft('保留原附件', ['file-1'])
+    expect(() => transferDraft(source, attachmentDraft(''))).toThrow('原草稿已保留')
+    expect(() => transferDraft(source, attachmentDraft(''), () => { throw new Error('upload rejected') })).toThrow('upload rejected')
+    expect(source.state.getSnapshot()).toMatchObject({ draft: '保留原附件', attachmentIds: ['file-1'] })
+  })
+
   it('moves text and image references after target admission', () => {
     const source = draft('未发送的需求 @设计图', ['image-1', 'image-2'])
     const target = draft('')

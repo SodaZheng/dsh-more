@@ -2,7 +2,7 @@ import { rm, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { SessionId, type Session } from '@deepseek-ai/dsh-session'
+import { SessionId, type Session, type SessionHeader } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { DshMoreError } from '../../../platform/dsh/host/error.js'
@@ -38,13 +38,19 @@ function detachInternal(registry: unknown, sessionId: SessionId, label: string):
 async function unloadLiveSession(ctx: Context, sessionId: SessionId): Promise<void> {
   const agent = ctx.agents.get(sessionId)
   const session = ctx.sessions.get(sessionId)
+  const handle = getLiveSessionHandle(ctx, sessionId)
+  // 0.1.5 releases persistence ownership in the Agent handle's teardown.
+  // Detaching the registries alone would leave its writer and file lock alive.
+  const ownsWriter = 'open' in ctx.sessionPersistence && typeof ctx.sessionPersistence.open === 'function'
+  if (session !== undefined && ownsWriter && handle === undefined) {
+    throw new DshMoreError('session-not-live', '无法安全卸载这条已加载的会话，请重启 DSH 后再删除。', 409)
+  }
   if (agent !== undefined) {
     agent.cancel({ kind: 'disposed' })
     await agent.whenIdle()
   }
   if (session !== undefined) await ctx.sessions.flush(session)
 
-  const handle = getLiveSessionHandle(ctx, sessionId)
   if (handle !== undefined) {
     await handle.dispose()
   } else {
@@ -69,7 +75,8 @@ function sessionDirectoryFromLocation(locationPath: string): string {
     throw new DshMoreError('internal', '当前持久化后端没有返回绝对会话路径。', 409)
   }
   const artifact = basename(locationPath)
-  if (artifact !== 'session.jsonl' && artifact !== 'session.jsonl.zstd') {
+  const match = /^session(?:\.v([1-9][0-9]*))?\.jsonl(?:\.zstd)?$/.exec(artifact)
+  if (match === null || match[1] !== undefined && !Number.isSafeInteger(Number(match[1]))) {
     throw new DshMoreError('internal', '持久化后端返回了未知的会话文件布局。', 500)
   }
   const sessionDir = dirname(locationPath)
@@ -85,10 +92,14 @@ export async function deleteSessionPermanently(ctx: Context, rawSessionId: strin
 }> {
   const sessionId = SessionId(rawSessionId)
   const live = ctx.sessions.get(sessionId) as Session | undefined
-  const header = (await ctx.sessionPersistence.list()).find((candidate) => candidate.id === sessionId) ?? live?.header
+  // 0.1.2 returns headers; 0.1.5 returns { header, revision } snapshots.
+  const stored: readonly (SessionHeader | { header: SessionHeader })[] = await ctx.sessionPersistence.list()
+  const header = stored.map((candidate) => 'header' in candidate ? candidate.header : candidate)
+    .find((candidate) => candidate.id === sessionId) ?? live?.header
   if (header === undefined) throw new DshMoreError('not-found', '会话记录不存在。', 404)
 
-  const location = ctx.sessionPersistence.locate(header)
+  // Still supplied by the JSONL backend in 0.1.5, but no longer on every backend.
+  const location = typeof ctx.sessionPersistence.locate === 'function' ? ctx.sessionPersistence.locate(header) : undefined
   if (location === undefined) {
     throw new DshMoreError('internal', '当前持久化后端不支持逐会话物理删除。', 409)
   }
@@ -98,7 +109,10 @@ export async function deleteSessionPermanently(ctx: Context, rawSessionId: strin
   const sessionDir = sessionDirectoryFromLocation(location.path)
   await unloadLiveSession(ctx, sessionId)
 
-  const info = await stat(sessionDir).catch(() => undefined)
+  const info = await stat(sessionDir).catch((error: unknown) => {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return undefined
+    throw error
+  })
   if (info !== undefined) {
     if (!info.isDirectory()) throw new DshMoreError('internal', '会话持久化路径不是目录。', 500)
     await rm(sessionDir, { recursive: true, force: false })

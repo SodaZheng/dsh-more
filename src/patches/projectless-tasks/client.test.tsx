@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SlotCore, type PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ComposerBarOwnerProps, ConversationSlotProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { DEFAULT_PATCH_SETTINGS } from '../../generated/patch-catalog.js'
-import { clientSessionActions, installConversationAdapter, unlockComposer } from './client/adapter.js'
+import { clientSessionActions, conversationSlot, installConversationAdapter, unlockComposer } from './client/adapter.js'
 import { PROJECTLESS_TASKS_PATCH_ID as ID } from './shared.js'
 
 vi.mock('../../platform/dsh/client/api.js', () => ({ callPatchApi: vi.fn(), apiErrorText: (error: unknown) => String(error) }))
@@ -49,17 +49,18 @@ describe('native composer compatibility', () => {
     expect(clientSessionActions({ sessions } as never)).toBe(sessions)
   })
 
-  async function harness() {
+  async function harness(name: 'conversation' | 'main.conversation' = 'conversation') {
+    const slot = conversationSlot(name)
     const slots = new SlotCore()
     const state = activation()
     const native = vi.fn((props: PropsRenderSlots<'conversation.composer.bar'>) => <>{props.renderSlot('conversation.composer.bar', gated)}</>)
-    slots.register({ name: 'root', children: { conversation: { kind: 'single', scope: 'session-maybe' } } },
-      (props: PropsRenderSlots<'conversation'>) => props.renderSlot('conversation', {}))
-    slots.register({ name: 'conversation', children: { 'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' } } }, native)
-    const originalEntry = slots.entries('conversation')[0]!
-    const dispose = installConversationAdapter({ slots } as never, state)
+    slots.register({ name: 'root', children: { [slot]: { kind: 'single', scope: 'session-maybe' } } },
+      (props: PropsRenderSlots<'conversation'>) => props.renderSlot(slot, {}))
+    slots.register({ name: slot, children: { 'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' } } }, native)
+    const originalEntry = slots.entries(slot)[0]!
+    const dispose = installConversationAdapter({ slots } as never, state, name)
     disposers.push(dispose)
-    const entry = slots.entriesOfSlot('conversation')[0]!
+    const entry = slots.entriesOfSlot(slot)[0]!
     expect(entry).toBe(originalEntry)
     expect(entry.children).toBe(originalEntry.children)
     let workspace = { phase: 'ready', items: [] as Array<{ sessionIds: string[] }> }
@@ -90,8 +91,8 @@ describe('native composer compatibility', () => {
     }
   }
 
-  it('unlocks ordinary ungrouped sessions and restores on toggle without replacing the native component', async () => {
-    const app = await harness()
+  it.each(['conversation', 'main.conversation'] as const)('unlocks and restores the %s shell without replacing the native composer', async (name) => {
+    const app = await harness(name)
     const input = document.querySelector('textarea')!
     expect(input.disabled).toBe(false)
     await app.state.toggle(false)
@@ -101,7 +102,7 @@ describe('native composer compatibility', () => {
     expect(input.disabled).toBe(false)
     await act(async () => app.dispose())
     expect(app.entry.component).toBe(app.native)
-    expect(app.slots.entries('conversation')).toHaveLength(1)
+    expect(app.slots.entries(conversationSlot(name))).toHaveLength(1)
     expect(input.disabled).toBe(true)
   })
 

@@ -1,25 +1,43 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { SessionInput } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { DraftAttachmentId } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
-type Draft = Pick<SessionInput, 'state' | 'setDraft' | 'addImages' | 'removeImage'>
+interface Draft {
+  state: { getSnapshot(): { phase: string; draft: string; imageIds?: readonly DraftAttachmentId[]; attachmentIds?: readonly DraftAttachmentId[] } }
+  setDraft(text: string): void
+  addImages?(ids: DraftAttachmentId[]): boolean
+  removeImage?(id: DraftAttachmentId): unknown
+  addAttachments?(ids: readonly DraftAttachmentId[]): boolean
+  removeAttachment?(id: DraftAttachmentId): unknown
+}
 
 /** Move only after all target admission checks pass; never overwrite another draft. */
-export function transferDraft(source: Draft, target: Draft): void {
+export function transferDraft(source: Draft, target: Draft, rebind?: (ids: readonly DraftAttachmentId[]) => void): void {
   const from = source.state.getSnapshot()
   const to = target.state.getSnapshot()
   if (from.phase !== 'plain' || to.phase !== 'plain') throw new Error('输入正在处理中，请稍后切换任务目录。')
   if (from.draft !== '' && to.draft !== '' && from.draft !== to.draft) {
     throw new Error('目标任务已有其他草稿，本次切换已停止，原草稿已保留。')
   }
-  if (from.imageIds.length > 0 && !target.addImages([...from.imageIds])) {
+  const ids = from.attachmentIds ?? from.imageIds
+  const add = from.attachmentIds === undefined ? target.addImages : target.addAttachments
+  const remove = from.attachmentIds === undefined ? source.removeImage : source.removeAttachment
+  if (!Array.isArray(ids) || typeof add !== 'function' || typeof remove !== 'function') {
+    throw new Error('当前 DSH 版本的草稿接口不兼容，原草稿已保留。')
+  }
+  if (ids.length > 0 && !add.call(target, [...ids])) {
     throw new Error('暂时无法转移图片，原草稿已保留，请稍后重试。')
+  }
+  // Newer DSH file uploads belong to a Session. Rebind before clearing the source.
+  if (ids.length > 0 && from.attachmentIds !== undefined) {
+    if (rebind === undefined) throw new Error('无法转移附件归属，原草稿已保留。')
+    rebind(ids)
   }
   if (from.draft !== '') target.setDraft(from.draft)
   // Target now owns the draft. A retry with an empty source preserves it.
   if (from.draft !== '') source.setDraft('')
-  from.imageIds.forEach((id) => source.removeImage(id))
+  ids.forEach((id) => remove.call(source, id))
 }
 
 /** Validate the Client-only service methods where Cordis Host types overlap. */
@@ -38,6 +56,10 @@ export function transferBeforeOpen(ctx: Context, sourceId: SessionId | undefined
   const source = sessions.scope(sourceId)
   const target = sessions.scope(targetId)
   if (source === undefined || target === undefined) throw new Error('任务尚未准备好，原草稿已保留，请稍后重试。')
-  transferDraft(ctx.conversation.input.for(source), ctx.conversation.input.for(target))
+  const conversation = ctx.conversation as typeof ctx.conversation & {
+    rebindDraftFiles?(id: SessionId, ids: readonly DraftAttachmentId[]): void
+  }
+  transferDraft(conversation.input.for(source), conversation.input.for(target),
+    typeof conversation.rebindDraftFiles === 'function' ? (ids) => conversation.rebindDraftFiles!(targetId, ids) : undefined)
   return true
 }

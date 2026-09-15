@@ -9,6 +9,7 @@ import {
   installPickerAdapter, labelIndependentChip, withIndependentChoice,
 } from './client/picker.js'
 import { clientPatch } from './client/index.js'
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({ Button: () => null, Modal: () => null }))
 
 let root: Root | undefined
 beforeEach(() => { vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true) })
@@ -33,10 +34,12 @@ describe('native workspace picker', () => {
       expect(dependencies).toContain('uiWorkspace')
       install(scope)
     })
-    clientPatch.install({ inject } as never, {} as never)
+    const groupingSlots = { inject: vi.fn() }
+    clientPatch.install({ inject, slots: groupingSlots, settingsScope: { bind: vi.fn() } } as never, {} as never)
     expect(inject).toHaveBeenCalledOnce()
     expect(scope.effect).toHaveBeenCalledOnce()
-    expect(scopedSlots.inject.mock.calls.map(([name]) => name)).toEqual(['conversation', 'conversation.hero.workspace'])
+    expect(scopedSlots.inject.mock.calls.map(([name]) => name)).toEqual(['conversation', 'main.conversation', 'conversation.hero.workspace'])
+    expect(groupingSlots.inject.mock.calls[0]?.[0]).toBe('sidebar.workspaces')
   })
 
   it('prepends a menu-local option without changing the Workspace snapshot', () => {
