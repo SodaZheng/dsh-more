@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
-import { ToolCallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { SESSION_FORMAT_VERSION, Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import { ToolCallId, createAssistantMessage, createSystemMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { SESSION_FORMAT_VERSION, Session, SessionId, SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
@@ -31,8 +31,45 @@ describe('message-delete patch', () => {
     const rebuilt = buildCleanSeed(session, selectMessageDeletion(session, first.assistantSeq))
     const answers = rebuilt.filter((event) => event.type === 'assistant/message')
     expect(answers).toHaveLength(1)
-    expect(answers[0]?.data).toEqual({ ...data, turn: 1, step: 1 })
+    expect(answers[0]?.data).toEqual({ ...data, turn: 2, step: 1 })
     expect(session.eventAt(retained.seq)?.data).toEqual(data)
+  })
+
+  it('retains system instructions, request configuration, session state and title without replaying queued work', () => {
+    const session = Session.create(SessionId('session-delete-live-shape'))
+    // Optional plugin events need no runtime dependency in this test fixture.
+    const state = [
+      { type: 'sandbox/mode', data: { mode: 'danger-full-access' } },
+      { type: 'approval/policy', data: { policy: 'never' } },
+      { type: 'permission/preset', data: { preset: 'full-access' } },
+    ] as unknown as SessionEvent[]
+    for (const event of state) session.append(event.type, event.data)
+    const original = createUserMessage({ content: [{ type: 'text', text: 'keep user' }], source: { kind: 'user' } })
+    session.append('agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [original] })
+    session.append('turn/start', { turn: 1 })
+    session.append('agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 1, inserted: [] })
+    session.append('step/start', { turn: 1, step: 1 })
+    session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('retain system prompt', 'test') }, { surfaceOp: 'append' })
+    const user = session.append('user/message', original, { surfaceOp: 'append' })
+    session.append('request/header', { reason: 'initial', header: { config: { provider: 'test', model: 'chosen-model' } } })
+    const answer = session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createAssistantMessage({
+      content: [{ type: 'text', text: 'remove answer' }], source: { provider: 'test', model: 'chosen-model' },
+    }) }, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    session.append('session/title', { title: 'Keep title', messageSeqs: [user.seq], source: { kind: 'fallback' } })
+    const before = session.snapshotEvents()
+    const clean = Session.create(SessionId('session-delete-live-shape-child'), buildCleanSeed(session, selectMessageDeletion(session, answer.seq)))
+    expect(clean.deriveMessages().map((message) => message.role)).toEqual(['system', 'user'])
+    expect(clean.requestHeader()).toEqual(session.requestHeader())
+    const events = clean.snapshotEvents()
+    for (const event of state) expect(events.find((item) => item.type === event.type)?.data).toEqual(event.data)
+    expect(events.some((event) => event.type === 'agent/inbox/spliced')).toBe(false)
+    expect(events.filter((event) => event.type === 'turn/start')).toHaveLength(1)
+    const title = events.find((event) => event.type === 'session/title')
+    expect(title?.data.title).toBe('Keep title')
+    expect(clean.eventAt(title!.data.messageSeqs[0]!)?.type).toBe('user/message')
+    expect(session.snapshotEvents()).toBe(before)
   })
 
   it('selects one ordinary message without widening a balanced surface', () => {
@@ -40,6 +77,23 @@ describe('message-delete patch', () => {
     const first = addTurn(session, 1, 'first')
     expect(selectMessageDeletion(session, first.userSeq)).toMatchObject({ shadowedSeqs: [first.userSeq] })
     expect(selectMessageDeletion(session, first.assistantSeq)).toMatchObject({ shadowedSeqs: [SessionSeq(first.assistantSeq)] })
+  })
+
+  it('keeps a replaced system prompt at the head of the surface', () => {
+    const session = Session.create(SessionId('session-delete-replaced-system'))
+    session.append('turn/start', { turn: 1 })
+    session.append('step/start', { turn: 1, step: 1 })
+    const system = session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('old system', 'test') }, { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'keep user' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const second = addTurn(session, 2, 'second')
+    session.append('system/message', { turn: 2, step: 1, message: createSystemMessage('current system', 'test') }, {
+      surfaceOp: { op: 'replace', startSeq: system.seq, endSeq: system.seq }, sourceEventSeqs: [system.seq],
+    })
+    const clean = Session.create(SessionId('session-delete-replaced-system-child'), buildCleanSeed(session, selectMessageDeletion(session, second.assistantSeq)))
+    expect(clean.deriveMessages()).toEqual(session.deriveMessages().filter((message) => message.role !== 'assistant'))
+    expect(clean.snapshotEvents().filter((event) => event.type === 'turn/start')).toHaveLength(2)
   })
 
   it('keeps the retained runtime context through the first user turn after deletion', async () => {

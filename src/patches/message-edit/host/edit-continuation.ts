@@ -89,8 +89,15 @@ export async function createEditedContinuation(
       ...((request?.provider ?? sourceAgent.options.provider) === undefined ? {} : { provider: request?.provider ?? sourceAgent.options.provider }),
       ...((request?.model ?? sourceAgent.options.model) === undefined ? {} : { model: request?.model ?? sourceAgent.options.model }),
       ...(sourceAgent.options.maxTokens === undefined ? {} : { maxTokens: sourceAgent.options.maxTokens }),
+      ...((request?.reasoningEffort ?? sourceAgent.options.reasoningEffort) === undefined ? {} : {
+        reasoningEffort: request?.reasoningEffort ?? sourceAgent.options.reasoningEffort,
+      }),
     },
-    setup: (agentCtx: Context) => {
+    setup: (agentCtx: Context, agent: Agent) => {
+      // The prefix includes the inbox insertion that preceded turn/start, but
+      // not the claim inside that turn. Cancel it before publication starts the
+      // loop, otherwise the original prompt runs before the edited followup.
+      agent.inbox.clear()
       // A rollback continues the source Agent's exact live composition. Mounting
       // again by id can select a different preset generation.
       roster?.composeFrom(agentCtx, sourceAgent.ctx)

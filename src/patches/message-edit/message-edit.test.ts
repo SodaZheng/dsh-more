@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -54,6 +54,7 @@ describe('message-edit patch', () => {
     let composedFrom: Context | undefined
     let followedText: string | undefined
     let resolveIdle: (() => void) | undefined
+    const clearInbox = vi.fn()
     const idle = new Promise<void>((resolve) => { resolveIdle = resolve })
     const roster = {
       composeFrom: (_child: Context, parent: Context) => { composedFrom = parent },
@@ -63,7 +64,9 @@ describe('message-edit patch', () => {
       sessionProjections: { stateOf: () => null },
       agents: {
         create: async (options: CreateAgentOptions) => {
-          await options.setup?.(agentCtx, { session: Session.create(options.sessionId), ctx: agentCtx } as Agent)
+          await options.setup?.(agentCtx, {
+            session: Session.create(options.sessionId), ctx: agentCtx, inbox: { clear: clearInbox },
+          } as unknown as Agent)
           return {
             agent: {
               followup: (message: ReturnType<typeof createUserMessage>) => {
@@ -87,6 +90,7 @@ describe('message-edit patch', () => {
     })
     expect(composedFrom).toBe(sourceCtx)
     expect(followedText).toBe('rewritten')
+    expect(clearInbox).toHaveBeenCalledOnce()
     if (assemblyHandler === undefined) throw new Error('runtime-context replay listener was not registered')
     const currentAssembly: PromptAssembly = {
       sections: [],
@@ -103,6 +107,42 @@ describe('message-edit patch', () => {
     await idle
     await Promise.resolve()
     expect(replayReleased).toBe(true)
+  })
+
+  it('cancels the replayed original inbox before the child loop starts and submits the edit only once', async () => {
+    const session = Session.create(SessionId('session-edit-durable-inbox'))
+    const original = createUserMessage({ content: [{ type: 'text', text: 'original' }], source: { kind: 'user' } })
+    session.append('agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [original] })
+    session.append('turn/start', { turn: 1 })
+    session.append('agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 1, inserted: [] })
+    session.append('step/start', { turn: 1, step: 1 })
+    const target = session.append('user/message', original, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const before = session.snapshotEvents()
+    const actions: string[] = []
+    const childCtx = { on: () => () => undefined } as unknown as Context
+    const ctx = {
+      get: () => undefined,
+      sessionProjections: { stateOf: () => null },
+      agents: { create: async (options: CreateAgentOptions) => {
+        expect(options.seed).toEqual(before.slice(0, 1))
+        const child = {
+          session: Session.create(options.sessionId, options.seed),
+          inbox: { clear: () => { actions.push('cancel inherited inbox') } },
+          followup: (message: ReturnType<typeof createUserMessage>) => { actions.push(JSON.stringify(message.content)) },
+          whenIdle: async () => undefined,
+        } as unknown as Agent
+        await options.setup?.(childCtx, child)
+        actions.push('start loop')
+        return { agent: child, dispose: async () => undefined }
+      } },
+      workspaceRegistry: { list: () => [], archiveSession: async () => undefined },
+    } as unknown as Context
+    await createEditedContinuation(ctx, { session, options: {}, ctx: {} } as Agent,
+      inspectEditCut(session, target.seq, 'edited'), 'edited')
+    expect(actions).toEqual(['cancel inherited inbox', 'start loop', JSON.stringify([{ type: 'text', text: 'edited' }])])
+    expect(session.snapshotEvents()).toBe(before)
   })
 
   it('removes a failed child from its workspace before disposing it', async () => {
