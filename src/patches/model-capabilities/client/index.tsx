@@ -6,6 +6,7 @@ import type { PatchActivationSource } from '../../../kernel/client/activation.js
 import type { ClientPatch } from '../../../kernel/client/patch.js'
 import { readCapabilities } from './api.js'
 import { PLUGIN_NAME } from '../../../platform/dsh/identity.js'
+import { bindSettings } from '../../../platform/dsh/client/settings.js'
 import { LLM_PI_AI_SETTINGS_NAMESPACE, LLM_DEEPSEEK_SETTINGS_NAMESPACE, DEEPSEEK_PROVIDER, MODEL_CAPABILITIES_PATCH_ID, type ModelCapabilitiesSnapshot, type ModelSettingsNamespace } from '../shared.js'
 import { CapabilitiesEditorModal, summaryLabel } from './editor.js'
 import { findModelEntries, modelIdOf, providerRouteOf } from './model-entries.js'
@@ -111,7 +112,7 @@ export const clientPatch: ClientPatch = {
   id: MODEL_CAPABILITIES_PATCH_ID,
   install: (ctx: ClientContext, activation: PatchActivationSource) => {
     const bindScope = (namespace: ModelSettingsNamespace): SettingsScope<unknown> => {
-      const scope = ctx.settingsScope.bind<unknown>({ namespace })
+      const scope = bindSettings<unknown>(ctx, { namespace })
       // DSH scope methods live on the prototype. React invokes them bare, so
       // bind once here to preserve the controller's receiver.
       return {

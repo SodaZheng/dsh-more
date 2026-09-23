@@ -1,8 +1,9 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { PatchConfigCard, type PatchConfigCardProps } from '../../src/kernel/client/config-card.js'
+import { installPatchConfigCard, PatchConfigCard, type PatchConfigCardProps } from '../../src/kernel/client/config-card.js'
 import type { PatchActivationSource } from '../../src/kernel/client/activation.js'
 import {
   DEFAULT_PATCH_SETTINGS,
@@ -41,6 +42,18 @@ function render(initiallyOpen: boolean): string {
 }
 
 describe('patch config card', () => {
+  it.each([false, true])('registers a visible settings contribution with current forms=%s', (current) => {
+    const register = vi.fn((_options: object, _component: unknown) => () => {})
+    const inject = vi.fn((_slot: string, install: () => void) => install())
+    const ctx = { get: () => current ? {} : undefined, slots: { inject, register } } as unknown as Context
+    installPatchConfigCard(ctx, activation)
+    expect(inject).toHaveBeenCalledOnce()
+    expect(register).toHaveBeenCalledOnce()
+    expect(register.mock.calls[0]?.[0]).toMatchObject(current
+      ? { name: 'settings.section', id: 'dsh-more', label: 'DSH More' }
+      : { name: 'settings.plugin.item', key: 'dsh-more' })
+  })
+
   it('starts collapsed with disclosure semantics', () => {
     const html = render(false)
     expect(html).toContain('aria-expanded="false"')

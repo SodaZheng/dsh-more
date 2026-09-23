@@ -3,10 +3,10 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   Button,
-  IconEditOutline16,
   Modal,
   Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEditOutline16 } from '../../../platform/dsh/client/icons.js'
 import { apiErrorText, callPatchApi } from '../../../platform/dsh/client/api.js'
 import type { ConversationHeaderProps, MessageActions, MessageTarget } from '../../../kernel/client/message-actions.js'
 import type { RefreshableSessions } from '../../../platform/dsh/client/runtime.js'

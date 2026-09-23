@@ -20,7 +20,10 @@ export const hostPatch: HostPatch = {
   id: PROJECTLESS_TASKS_PATCH_ID,
   setup: (ctx) => {
     const fiber = ctx.inject(['settings'], (scope) => {
-      scope.settings.register(SESSION_GROUPS_NAMESPACE, SessionGroupsSchema)
+      // New hosts project the companion entry's Config under this same namespace.
+      if (typeof scope.settings.register === 'function') {
+        scope.settings.register(SESSION_GROUPS_NAMESPACE, SessionGroupsSchema)
+      }
     })
     return () => { void fiber.dispose() }
   },

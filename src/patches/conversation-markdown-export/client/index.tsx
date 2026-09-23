@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   Button,
-  IconDownloadOutline16,
   Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconDownloadOutline16 } from '../../../platform/dsh/client/icons.js'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import type { ClientPatch } from '../../../kernel/client/patch.js'
 import { apiErrorText, callPatchBlobApi } from '../../../platform/dsh/client/api.js'

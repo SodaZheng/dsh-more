@@ -1,7 +1,6 @@
 import { useState, useSyncExternalStore } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { IconChevronDownOutline14 } from '../../platform/dsh/client/icons.js'
 export type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import {
   PATCH_CATALOG,
@@ -11,9 +10,7 @@ import { PATCH_SETTINGS_NAMESPACE } from '../../platform/dsh/identity.js'
 import { styles } from '../../platform/dsh/client/styles.js'
 import type { PatchActivationSource } from './activation.js'
 
-type CardProps = PropsRuntime<'settings.plugin.item'>
-
-export interface PatchConfigCardProps extends CardProps {
+export interface PatchConfigCardProps {
   activation: PatchActivationSource
   initiallyOpen?: boolean
 }
@@ -60,7 +57,7 @@ export function PatchConfigCard({ activation, initiallyOpen = false }: PatchConf
           <strong>DSH More</strong>
           <span>动态开启或关闭独立补丁，默认全部开启。</span>
         </span>
-        <IconChevronDownOutline14 className={`dshmore-config-chevron${open ? ' dshmore-config-chevron-open' : ''}`} />
+        <IconChevronDownOutline14 size={14} className={`dshmore-config-chevron${open ? ' dshmore-config-chevron-open' : ''}`} />
       </button>
       {open && (
         <div className="dshmore-config-body">
@@ -95,9 +92,18 @@ export function PatchConfigCard({ activation, initiallyOpen = false }: PatchConf
 }
 
 export function installPatchConfigCard(ctx: ClientContext, activation: PatchActivationSource): void {
+  if (ctx.get('configForms') !== undefined) {
+    ctx.slots.inject('settings.section', () => ctx.slots.register({
+      name: 'settings.section',
+      id: PATCH_SETTINGS_NAMESPACE,
+      order: 90,
+      label: 'DSH More',
+    }, () => <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}><PatchConfigCard activation={activation} initiallyOpen /></ul>))
+    return
+  }
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
     key: PATCH_SETTINGS_NAMESPACE,
     priority: 90,
-  }, (props: CardProps) => <PatchConfigCard {...props} activation={activation} />))
+  }, () => <PatchConfigCard activation={activation} />))
 }

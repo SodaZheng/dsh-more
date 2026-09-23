@@ -58,4 +58,16 @@ describe('durable session grouping', () => {
     await expect(app.move()).rejects.toThrow('disk full')
     expect(app.assignments).toEqual({})
   })
+
+  it('moves sessions through Config forms after the settings get API was removed', async () => {
+    const app = harness()
+    const settings = {
+      writable: true,
+      describe: () => [{ ns: SESSION_GROUPS_NAMESPACE, value: { assignments: app.assignments } }],
+      mutate: app.ctx.settings.mutate,
+    }
+    await expect(moveSessionGroup({ ...app.ctx, settings } as never, { sessionId: 'source', workspaceId: 'target' }))
+      .resolves.toEqual({ sessionId: 'source', workspaceId: 'target' })
+    expect(app.assignments).toEqual({ source: 'target' })
+  })
 })

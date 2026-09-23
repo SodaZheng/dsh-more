@@ -4,9 +4,9 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   Button,
-  IconWarningOutline16,
   Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconWarningOutline16 } from '../../../platform/dsh/client/icons.js'
 import { apiErrorText, callPatchApi } from '../../../platform/dsh/client/api.js'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import type { ClientPatch } from '../../../kernel/client/patch.js'

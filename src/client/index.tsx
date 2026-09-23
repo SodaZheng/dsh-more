@@ -23,9 +23,10 @@ import {
 } from '../kernel/message-visibility.js'
 import { useMessageTargets } from '../platform/dsh/client/message-targets.js'
 import { styles } from '../platform/dsh/client/styles.js'
+import { bindSettings, withSettings } from '../platform/dsh/client/settings.js'
 import { PATCH_SETTINGS_NAMESPACE, PLUGIN_NAME } from '../platform/dsh/identity.js'
 
-export const inject = ['slots', 'sessions', 'workspaces', 'settingsScope']
+export const inject = ['slots', 'sessions', 'workspaces']
 
 function MessageActionPatchController({ patch, props, targets, enabled }: {
   patch: MessageActionPatch
@@ -77,7 +78,11 @@ function MessageActionsController(props: ConversationHeaderProps & {
 }
 
 export function apply(ctx: ClientContext): void {
-  const scope = ctx.settingsScope.bind<PatchSettings>({
+  withSettings(ctx, install)
+}
+
+function install(ctx: ClientContext): void {
+  const scope = bindSettings<PatchSettings>(ctx, {
     namespace: PATCH_SETTINGS_NAMESPACE,
     decode: decodePatchSettings,
   })

@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { LlmError, ReasoningEffortId, type LlmCallConfig, type LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
 import { DEEPSEEK_PROVIDER, DEEPSEEK_THINKING_LEVELS, LLM_DEEPSEEK_SETTINGS_NAMESPACE, type ModelReasoningEfforts } from '../shared.js'
 import { validateReasoningEfforts } from './validate.js'
+import { readSettings } from '../../../platform/dsh/host/settings.js'
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -21,7 +22,7 @@ export function validateDeepSeekEfforts(efforts: ModelReasoningEfforts | null): 
 interface Rule { levels: readonly string[]; defaultEffort: string }
 function ruleFor(ctx: Context, provider: string, modelId: string): Rule | undefined {
   if (provider !== DEEPSEEK_PROVIDER) return undefined
-  const profile = record(ctx.settings.get(LLM_DEEPSEEK_SETTINGS_NAMESPACE))
+  const profile = record(readSettings(ctx, LLM_DEEPSEEK_SETTINGS_NAMESPACE))
   const models = Array.isArray(profile.models) ? profile.models : []
   const model = record(models.find((item) => record(item).id === modelId))
   if (model.reasoningEfforts === undefined) return undefined

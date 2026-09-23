@@ -4,6 +4,7 @@ import { SessionId, type SessionHeader } from '@deepseek-ai/dsh-session'
 import { WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import { DshMoreError } from '../../../platform/dsh/host/error.js'
 import { requireString } from '../../../platform/dsh/host/wire.js'
+import { readSettings } from '../../../platform/dsh/host/settings.js'
 import { SESSION_GROUPS_NAMESPACE, decodeSessionGroups, EMPTY_GROUPS, type SessionGroups } from '../groups.js'
 
 export const SessionGroupsSchema: z<SessionGroups> = z.object({ assignments: z.dict(z.string()).default({}) })
@@ -32,7 +33,7 @@ export async function moveSessionGroup(ctx: Context, payload: unknown): Promise<
   if (ctx.workspaceRegistry.list().some((workspace) => workspace.sessionIds.includes(sessionId))) {
     throw new DshMoreError('bad-request', '这条会话已有原生工作区，只支持移动未分组或手动归组的会话。')
   }
-  const current = decodeSessionGroups(ctx.settings.get(SESSION_GROUPS_NAMESPACE)) ?? EMPTY_GROUPS
+  const current = decodeSessionGroups(readSettings(ctx, SESSION_GROUPS_NAMESPACE)) ?? EMPTY_GROUPS
   const result = { sessionId, workspaceId }
   if ((current.assignments[sessionId] ?? null) === workspaceId) return result
   await ctx.settings.mutate(SESSION_GROUPS_NAMESPACE, [workspaceId === null

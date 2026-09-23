@@ -37,6 +37,10 @@
       "types": "./dist/types/client/index.d.ts",
       "default": "./dist/client.js"
     },
+    "./session-groups": {
+      "types": "./dist/types/patches/projectless-tasks/host/settings.d.ts",
+      "default": "./dist/session-groups.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

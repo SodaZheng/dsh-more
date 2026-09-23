@@ -8,6 +8,7 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import { apiErrorText, callPatchApi } from '../../../platform/dsh/client/api.js'
+import { bindSettings } from '../../../platform/dsh/client/settings.js'
 import { SESSION_GROUPS_NAMESPACE, EMPTY_GROUPS, decodeSessionGroups, type SessionGroups } from '../groups.js'
 import { PROJECTLESS_TASKS_PATCH_ID } from '../shared.js'
 import { installMoveMenu } from './group-menu.js'
@@ -112,7 +113,7 @@ export function extendGroupedSidebar(original: ComponentType<SidebarProps>, acti
 }
 
 export function installSessionGrouping(ctx: Context, activation: PatchActivationSource): void {
-  const source = ctx.settingsScope.bind<SessionGroups>({ namespace: SESSION_GROUPS_NAMESPACE, decode: decodeSessionGroups })
+  const source = bindSettings<SessionGroups>(ctx, { namespace: SESSION_GROUPS_NAMESPACE, decode: decodeSessionGroups })
   ctx.slots.inject(SIDEBAR_SLOT, () => {
     let live = true
     const listeners = new Set<() => void>()

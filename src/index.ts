@@ -9,15 +9,16 @@ import { installPatchSettings } from './kernel/host/settings.js'
 import { registerPatchApi } from './platform/dsh/host/api-router.js'
 import { PLUGIN_NAME } from './platform/dsh/identity.js'
 
+export { PatchConfig as Config } from './kernel/host/settings.js'
 export const name = PLUGIN_NAME
 export const inject = [
   'webServer', 'webRuntime', 'agents', 'sessions',
   'sessionPersistence', 'sessionProjections', 'workspaceRegistry', 'agentPresets', 'settings',
 ]
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config?: unknown): void {
   const activation = new HostPatchActivation(ctx, HOST_PATCHES)
   ctx.effect(() => () => activation.dispose(), `${PLUGIN_NAME}: patch activation`)
-  installPatchSettings(ctx, activation)
+  installPatchSettings(ctx, activation, config)
   registerPatchApi(ctx, HOST_PATCHES, randomBytes(32), (patchId) => activation.isEnabled(patchId))
 }

@@ -27,6 +27,16 @@ await new Promise((resolve, reject) => {
 
 await Promise.all([
   build({
+    entryPoints: ['./src/patches/projectless-tasks/host/settings.ts'],
+    outfile: './dist/session-groups.js',
+    absWorkingDir: root.pathname,
+    bundle: true,
+    packages: 'external',
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+  }),
+  build({
     entryPoints: ['./src/index.ts'],
     outfile: './dist/index.js',
     absWorkingDir: root.pathname,
