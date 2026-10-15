@@ -5,6 +5,30 @@ import { describe, expect, it, vi } from 'vitest'
 import { getLiveSessionHandle, installLiveSessionHandleTracker } from './host/live-session-handles.js'
 
 describe('live session handle tracking', () => {
+  it('preserves the calling Cordis fiber as the created Agent owner', async () => {
+    const seen: Context[] = []
+    class Registry extends Service {
+      constructor(ctx: Context) { super(ctx, 'agents') }
+      async create(): Promise<AgentHandle> {
+        seen.push(this.ctx)
+        return { agent: { id: SessionId('caller-owned') }, dispose: async () => {} } as AgentHandle
+      }
+      async resume(): Promise<AgentHandle> { return this.create() }
+    }
+    const ctx = new Context()
+    await ctx.plugin(Registry)
+    const stop = installLiveSessionHandleTracker(ctx)
+    let caller: Context | undefined
+    try {
+      await ctx.plugin({ inject: ['agents'], apply: async (scope: Context) => {
+        caller = scope
+        await scope.agents.create({ sessionId: SessionId('caller-owned') })
+      } })
+      expect(seen[0]?.fiber).toBe(caller?.fiber)
+      expect(seen[0]?.fiber).not.toBe(ctx.fiber)
+    } finally { stop(); await ctx.fiber.dispose() }
+  })
+
   it('shares a failed disposal across retries instead of reporting success', async () => {
     const sessionId = SessionId('session-tracker-failure')
     const failure = new Error('writer close failed')

@@ -11,6 +11,7 @@ import { apiErrorText, callPatchApi } from '../../../platform/dsh/client/api.js'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import type { ClientPatch } from '../../../kernel/client/patch.js'
 import type { RefreshableSessions, RefreshableWorkspaces } from '../../../platform/dsh/client/runtime.js'
+import { clientSessions, currentSessionId } from '../../../platform/dsh/client/runtime.js'
 import {
   adjacentVisibleSession,
   openSessionWithoutGap,
@@ -18,6 +19,7 @@ import {
 } from '../../../platform/dsh/client/session-sync.js'
 import { styles } from '../../../platform/dsh/client/styles.js'
 import { PLUGIN_NAME } from '../../../platform/dsh/identity.js'
+import { installSessionMenuAction } from '../../../platform/dsh/client/session-menu.js'
 import { SESSION_DELETE_PATCH_ID } from '../shared.js'
 
 type OverlayProps = PropsRuntime<'shell.overlay'>
@@ -139,21 +141,33 @@ function SessionDeleteController(props: OverlayProps & {
     if (!enabled) return
     const workspaces = (props.ctx as unknown as { workspaces: RefreshableWorkspaces }).workspaces
     const sessions = (props.ctx as unknown as { sessions: RefreshableSessions }).sessions
+    const requestDelete = (sessionId: SessionId, resolve: () => void = () => {}): void => {
+      const request = {
+        sessionId,
+        title: sessions.list.getSnapshot().byId[sessionId]?.displayTitle ?? String(sessionId),
+        resolve,
+      }
+      pendingRef.current?.resolve()
+      pendingRef.current = request
+      setError(null)
+      setPending(request)
+    }
+    const removeNativeItem = installSessionMenuAction(props.ctx, {
+      id: `${PLUGIN_NAME}-${SESSION_DELETE_PATCH_ID}`, label: '永久删除会话', order: 500, danger: true,
+      select: (sessionId) => requestDelete(sessionId),
+    })
+    if (removeNativeItem !== undefined) return () => {
+      removeNativeItem()
+      pendingRef.current?.resolve()
+      pendingRef.current = null
+    }
     const mutable = workspaces as unknown as { archiveSession: (sessionId: SessionId) => Promise<void> }
     const original = mutable.archiveSession
     mutable.archiveSession = (sessionId) => {
       if (!deleteIntentRef.current) return original.call(mutable, sessionId)
       deleteIntentRef.current = false
       return new Promise<void>((resolve) => {
-        const request = {
-          sessionId,
-          title: sessions.list.getSnapshot().byId[sessionId]?.displayTitle ?? String(sessionId),
-          resolve,
-        }
-        pendingRef.current?.resolve()
-        pendingRef.current = request
-        setError(null)
-        setPending(request)
+        requestDelete(sessionId, resolve)
       })
     }
     const removeDeleteItems = installSessionDeleteMenuItems((archiveButton) => {
@@ -182,15 +196,15 @@ function SessionDeleteController(props: OverlayProps & {
     if (pending === null) return
     setBusy(true)
     setError(null)
-    const sessions = (props.ctx as unknown as { sessions: RefreshableSessions }).sessions
+    const sessions = clientSessions(props.ctx)
     const workspaces = (props.ctx as unknown as { workspaces: RefreshableWorkspaces }).workspaces
     const fallbackSessionId = adjacentVisibleSession(
       sessions.list.getSnapshot(),
       workspaces.list.getSnapshot(),
       pending.sessionId,
     )
-    if (fallbackSessionId !== undefined) openSessionWithoutGap(sessions, fallbackSessionId)
     try {
+      if (fallbackSessionId !== undefined) openSessionWithoutGap(sessions, fallbackSessionId)
       await callPatchApi(SESSION_DELETE_PATCH_ID, 'commit', {
         sessionId: pending.sessionId,
         confirmSessionId: pending.sessionId,
@@ -200,6 +214,9 @@ function SessionDeleteController(props: OverlayProps & {
       pendingRef.current = null
       setPending(null)
     } catch (caught) {
+      const list = sessions.list.getSnapshot()
+      if (fallbackSessionId !== undefined && currentSessionId(list) === fallbackSessionId
+        && list.byId[pending.sessionId] !== undefined) openSessionWithoutGap(sessions, pending.sessionId)
       setError(apiErrorText(caught))
     } finally {
       setBusy(false)

@@ -270,6 +270,19 @@ pnpm run check
 pnpm run package:check
 ```
 
+适配官方 macOS 桌面端时，另外运行已安装桌面包的真实运行时检查：
+
+```sh
+pnpm run test:desktop
+DSH_MORE_DESKTOP_ASAR='/Applications/DeepSeek Harness.app/Contents/Resources/app.asar' pnpm exec vitest run src/patches/projectless-tasks/native-factory.test.tsx
+```
+
+`test:desktop` 默认使用 `/Applications/DeepSeek Harness.app`，可通过 `DSH_MORE_DESKTOP_APP` 指定其他安装位置。它在临时 `DSH_HOME` 中启动安装包自带的 Host，用本地模型替身验证导出内容、编辑后续跑、删除消息后重建、分组持久化、会话物理删除、模型能力保存与冲突处理、标题中间件。不会读取用户 profile、调用外部模型或修改用户会话。该检查验证真实 SDK 与后端行为；发布前仍应重载实际桌面窗口，验证功能入口、弹窗、导航和文件下载。
+
+DSH 0.1.7 的会话菜单提供 `sidebar.workspaces.session.menu.item`。优先通过共享 `platform/dsh/client/session-menu.tsx` 注册动作，直接使用该行的 `sessionId`；不要用点击原生归档按钮来获取目标会话。新版原生归档回调由菜单子插槽独立注入，且菜单包含快捷键文本，旧的父组件拦截与整行文字匹配不再可靠。旧版 DSH 才使用原有 DOM 适配。
+
+只有需要跨补丁开关保留的被动生命周期信息，才使用 HostPatch 的 `observe()`；其 disposer 在整个插件卸载时执行。例如永久删除必须跟踪补丁关闭期间创建的 Agent 句柄，才能在重新开启后安全释放写入锁。实际用户操作仍由 `setup()` 和启用状态控制的 API 执行。方法包装必须保留调用者的 `this`，避免改变 Cordis 的资源所属作用域。
+
 说明：
 
 - `build`、`typecheck` 和 `test` 都会自动运行生成器；

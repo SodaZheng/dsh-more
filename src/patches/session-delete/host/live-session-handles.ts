@@ -53,8 +53,10 @@ export function installLiveSessionHandleTracker(ctx: Context): () => void {
   tracker.originalResume = originalResume
   tracker.createDescriptor = Object.getOwnPropertyDescriptor(registry, 'create')
   tracker.resumeDescriptor = Object.getOwnPropertyDescriptor(registry, 'resume')
-  tracker.wrappedCreate = async (options) => trackedHandle(tracker, await originalCreate.call(registry, options))
-  tracker.wrappedResume = async (options) => trackedHandle(tracker, await originalResume.call(registry, options))
+  // Cordis traces the receiver to the caller's scope. Capturing registry here
+  // would incorrectly make the observing plugin the new Agent's owner.
+  tracker.wrappedCreate = async function (options) { return trackedHandle(tracker, await originalCreate.call(this, options)) }
+  tracker.wrappedResume = async function (options) { return trackedHandle(tracker, await originalResume.call(this, options)) }
   tracker.references = 1
   registry[TRACKER] = tracker
   registry.create = tracker.wrappedCreate

@@ -1,5 +1,5 @@
 const MENU_ITEM_ATTRIBUTE = 'data-dshmore-markdown-export'
-const MORE_BUTTON_SELECTOR = 'button[class*="_moreButton"][aria-haspopup="menu"]'
+const MORE_BUTTON_SELECTOR = 'button[aria-haspopup="menu"]'
 
 /** DSH 0.1.5 owns this menu inside session-log-export, without a child slot. */
 export function installMarkdownExportMenu(
@@ -21,15 +21,19 @@ export function installMarkdownExportMenu(
     frame = null
     const trigger = Array.from(header.querySelectorAll<HTMLButtonElement>(MORE_BUTTON_SELECTOR))
       .find((button) => ['更多操作', 'More actions'].includes(button.getAttribute('aria-label') ?? ''))
-    fallback.hidden = trigger !== undefined
-    // The native Menu is rendered beside its trigger, within this Session's header.
-    const download = trigger?.parentElement?.querySelector<HTMLButtonElement>('button[role="menuitem"]')
+    const open = trigger?.getAttribute('aria-expanded') === 'true'
+    // Keep a usable toolbar action if an opened native menu cannot be adapted.
+    fallback.hidden = trigger !== undefined && !open
+    // Buttons and menu rows can gain wrappers or change order between releases.
+    // Stay inside this Session's header, and identify the actual download row.
+    const download = open ? Array.from(header.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]'))
+      .find((button) => ['下载 Session 日志', 'Download session log'].includes(button.textContent?.trim() ?? '')) : undefined
     const text = download?.textContent?.trim()
     if (download === undefined || download === null || !['下载 Session 日志', 'Download session log'].includes(text ?? '')) {
       removeItem()
       return
     }
-    if (source === download && item?.isConnected === true) return
+    if (source === download && item?.isConnected === true) { fallback.hidden = true; return }
     removeItem()
     const wrapper = download.parentElement
     if (wrapper === null || wrapper.getAttribute('role') === 'menu') return
@@ -56,6 +60,7 @@ export function installMarkdownExportMenu(
     source = download
     item = clone
     wrapper.after(clone)
+    fallback.hidden = true
   }
   sync()
   const observer = new MutationObserver(() => {

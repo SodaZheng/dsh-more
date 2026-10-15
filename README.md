@@ -6,7 +6,7 @@ Practical, independently switchable patches for missing context and history cont
 
 `dsh-more` integrates with the existing DSH interface instead of adding a separate management dashboard. Its current patch set can edit a user message and restart from that point, remove one message while preserving the surrounding context, and permanently delete a session while leaving native archive behavior intact.
 
-> **Compatibility:** the current release targets DeepSeek Harness `0.1.5-rc.2` and requires Node.js `>= 24`. DSH is still a release candidate, so upgrades may require changes in the centralized adapter layer described below.
+> **Compatibility:** development dependencies target DeepSeek Harness `0.1.5-rc.2` and require Node.js `>= 24`. The current source has also been verified in a local linked installation of the official macOS desktop `0.1.7-rc.2`. DSH is still a release candidate, so upgrades may require adapter changes.
 
 ## Features
 
@@ -252,13 +252,15 @@ The repository does not currently contain a full browser end-to-end suite agains
 
 ## Compatibility notes
 
+See the [desktop verification record](./docs/desktop-compatibility.md) for the actual macOS `0.1.7-rc.2` window checks. The desktop adapter navigates through `uiWorkspace.openSession()`, reads current selection from `retainedBy.mainView`, and temporarily retains newly created Sessions until their drafts can be transferred. Independent tasks, edit/delete handoffs, and current-session deletion share this adapter.
+
 Development and host dependency ranges use `^0.1.5-rc.2`; the lockfile records the versions currently verified. The adapters and tests cover the current session format, message provenance, `main.conversation` slot, and JSONL persistence snapshots and location capability. For an existing local linked install, rebuild, restart DSH, and reload the page to load both the new Host and Client.
 
 - The current dependency set targets DSH `0.1.5-rc.2`; pre-release API or DOM changes can require adapter updates.
 - In-product DSH More copy is currently primarily Simplified Chinese, although native Copy/Archive selectors recognize both Chinese and English labels.
 - Message actions operate only on ordinary user messages and assistant messages still present in the current model surface; editing requires a completed owning turn.
 - Permanent deletion requires a `jsonl` backend with a valid location capability. Its current `locate` hook is internal; the adapter checks its presence and result. Tests cover plain and Zstandard-compressed session files.
-- Unloading a live session uses tracked public Agent handles. With handle-based persistence, deletion refuses an already-live session whose Agent handle was not tracked and asks for a DSH restart, preserving write ownership and file locks.
+- Unloading a live session uses tracked public Agent handles. Passive tracking spans the plugin lifetime, including periods when deletion is disabled, and preserves the caller's Cordis ownership. A live writer that predates the plugin's observation is still refused with a restart instruction, preserving write ownership and file locks.
 
 ## License
 

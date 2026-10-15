@@ -46,7 +46,9 @@ describe('native composer compatibility', () => {
   it('validates the Client/Host sessions boundary', () => {
     expect(() => clientSessionActions({ sessions: { create() {} } } as never)).toThrow('会话接口')
     const sessions = { create: vi.fn(), open: vi.fn() }
-    expect(clientSessionActions({ sessions } as never)).toBe(sessions)
+    const actions = clientSessionActions({ sessions } as never)
+    actions.open('test' as never)
+    expect(sessions.open).toHaveBeenCalledExactlyOnceWith('test')
   })
 
   async function harness(name: 'conversation' | 'main.conversation' = 'main.conversation') {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -11,6 +11,42 @@ import {
 } from '../../src/generated/patch-catalog.js'
 
 describe('patch activation', () => {
+  it('keeps passive observation through feature switches and stops it on plugin disposal', () => {
+    const stop = vi.fn()
+    const observe = vi.fn(() => stop)
+    const patch: HostPatch = { id: 'session-delete', observe, routes: () => ({}) }
+    const activation = new HostPatchActivation({} as Context, [patch])
+    activation.apply({ ...DEFAULT_PATCH_SETTINGS, 'session-delete': false })
+    expect(activation.isEnabled('session-delete')).toBe(false)
+    activation.apply(DEFAULT_PATCH_SETTINGS)
+    activation.apply({ ...DEFAULT_PATCH_SETTINGS, 'session-delete': false })
+    expect(observe).toHaveBeenCalledOnce()
+    expect(stop).not.toHaveBeenCalled()
+    activation.dispose()
+    activation.dispose()
+    expect(stop).toHaveBeenCalledOnce()
+  })
+
+  it('releases observers even when a feature disposer throws', () => {
+    const stop = vi.fn()
+    const activation = new HostPatchActivation({} as Context, [{
+      id: 'session-delete', observe: () => stop,
+      setup: () => () => { throw new Error('failed cleanup') }, routes: () => ({}),
+    }])
+    activation.apply(DEFAULT_PATCH_SETTINGS)
+    expect(() => activation.dispose()).toThrow('patch cleanup failed')
+    expect(stop).toHaveBeenCalledOnce()
+  })
+
+  it('rolls back observers if a later observer fails during installation', () => {
+    const stop = vi.fn()
+    expect(() => new HostPatchActivation({} as Context, [
+      { id: 'first', observe: () => stop, routes: () => ({}) },
+      { id: 'second', observe: () => { throw new Error('observe failed') }, routes: () => ({}) },
+    ])).toThrow('observe failed')
+    expect(stop).toHaveBeenCalledOnce()
+  })
+
   it('mounts, disposes, and remounts Host patch setup independently', () => {
     const events: string[] = []
     const ids = Object.keys(DEFAULT_PATCH_SETTINGS)

@@ -12,7 +12,7 @@ import { PLUGIN_NAME } from './platform/dsh/identity.js'
 export { PatchConfig as Config } from './kernel/host/settings.js'
 export const name = PLUGIN_NAME
 export const inject = [
-  'webServer', 'webRuntime', 'agents', 'sessions',
+  'webServer', 'webRuntime', 'agents', 'sessions', 'connection',
   'sessionPersistence', 'sessionProjections', 'workspaceRegistry', 'agentPresets', 'settings',
 ]
 

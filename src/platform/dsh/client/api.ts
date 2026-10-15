@@ -10,7 +10,12 @@ export class DshMoreApiError extends Error {
 async function requestPatch(patchId: string, action: string, payload: unknown): Promise<Response> {
   let response: Response
   try {
-    response = await fetch(`${PLUGIN_API_PREFIX}/${encodeURIComponent(patchId)}/${encodeURIComponent(action)}`, {
+    // Desktop 0.2 serves a static page; its supplied carrier reaches the Host.
+    const transport = (globalThis as typeof globalThis & {
+      __DSH_TRANSPORT__?: { fetch?: typeof fetch }
+    }).__DSH_TRANSPORT__
+    const send = transport?.fetch?.bind(transport) ?? globalThis.fetch.bind(globalThis)
+    response = await send(`${PLUGIN_API_PREFIX}/${encodeURIComponent(patchId)}/${encodeURIComponent(action)}`.slice(1), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement, type ComponentProps, type ReactNode } from 'react'
+import { act, createElement, useSyncExternalStore, type ComponentType, type ComponentProps, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -11,6 +11,7 @@ import { extendGroupedSidebar, projectSessionGroups } from './client/groups.js'
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   Button: (props: ComponentProps<'button'> & { variant: string }) => { const { variant: _, ...rest } = props; return <button {...rest} /> },
   Modal: ({ open, children, footer }: { open: boolean; children: ReactNode; footer: ReactNode }) => open ? <div role="dialog">{children}{footer}</div> : null,
+  MenuItemButton: ({ children, onSelect }: { children: ReactNode; onSelect(): void }) => <button role="menuitem" onClick={onSelect}>{children}</button>,
 }))
 vi.mock('../../platform/dsh/client/api.js', () => ({ callPatchApi: vi.fn(), apiErrorText: (error: unknown) => String(error) }))
 let root: Root | undefined
@@ -37,7 +38,7 @@ describe('session grouping sidebar', () => {
     expect(projectSessionGroups(native, sessions, { assignments: { source: 'deleted-project' } })).toBe(native)
   })
 
-  async function harness() {
+  async function harness(nativeMenus = false) {
     let settings = { ...DEFAULT_PATCH_SETTINGS }
     const listeners = new Set<() => void>()
     const activation = { getSnapshot: () => settings, subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } } }
@@ -45,12 +46,27 @@ describe('session grouping sidebar', () => {
     const sourceListeners = new Set<() => void>()
     const source = { getSnapshot: () => saved, subscribe: (fn: () => void) => { sourceListeners.add(fn); return () => { sourceListeners.delete(fn) } } }
     const archive = vi.fn(async () => {})
+    const nativeItems = new Set<ComponentType<Record<string, unknown>>>()
+    const menuListeners = new Set<() => void>()
+    let menuRevision = 0
+    const changed = () => { menuRevision += 1; menuListeners.forEach((fn) => fn()) }
+    const menuSource = { subscribe: (fn: () => void) => { menuListeners.add(fn); return () => { menuListeners.delete(fn) } }, getSnapshot: () => menuRevision }
+    const ctx = nativeMenus ? { slots: {
+      spec: () => ({ kind: 'list' }),
+      register: (_options: object, entry: ComponentType<Record<string, unknown>>) => {
+        nativeItems.add(entry); changed()
+        return () => { nativeItems.delete(entry); changed() }
+      },
+    } } : undefined
     const Native = (props: { useWorkspaces: (fn: (data: WorkspaceSnapshot) => WorkspaceSnapshot) => WorkspaceSnapshot; archiveSession: (id: string) => void }) => {
+      useSyncExternalStore(menuSource.subscribe, menuSource.getSnapshot)
       const list = props.useWorkspaces((data) => data)
       return <div><div className="native_sessionRow native_menuOpen" /><input aria-label="现有输入" defaultValue="保留草稿" /><output>{JSON.stringify(list.items.map((item) => item.sessionIds))}</output>
-        <div role="menu"><div><button role="menuitem" onClick={() => props.archiveSession('source')}>归档会话</button></div></div></div>
+        <div role="menu"><div><button role="menuitem" onClick={() => nativeMenus ? archive() : props.archiveSession('source')}>归档会话{nativeMenus && <span aria-hidden>⌘E</span>}</button></div>
+          {[...nativeItems].map((Item, index) => <Item key={index} sessionId="source" useMenuOpenState={() => [true, () => {}]} />)}
+        </div></div>
     }
-    const Grouped = extendGroupedSidebar(Native as never, activation as never, source as never)
+    const Grouped = extendGroupedSidebar(Native as never, activation as never, source as never, undefined, ctx as never)
     root = createRoot(document.body.appendChild(document.createElement('div')))
     await act(async () => root!.render(createElement(Grouped, { useWorkspaces: (fn: (data: WorkspaceSnapshot) => unknown) => fn(native),
       useSessions: (fn: (data: SessionListState) => unknown) => fn(sessions), archiveSession: archive } as never)))
@@ -62,6 +78,19 @@ describe('session grouping sidebar', () => {
   const button = (text: string) => [...document.querySelectorAll('button')].find((item) => item.textContent === text)!
   async function openMove() { await act(async () => button('移动到工作区…').click()) }
   async function choose(id: string) { await act(async () => { const select = document.querySelector('select')!; select.value = id; select.dispatchEvent(new Event('change', { bubbles: true })) }) }
+
+  it('uses the 0.1.7 menu slot even when native archive is injected in the child and has shortcut text', async () => {
+    const app = await harness(true)
+    await openMove()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('原会话')
+    expect(app.archive).not.toHaveBeenCalled()
+    await choose('b')
+    await act(async () => button('移动').click())
+    expect(callPatchApi).toHaveBeenCalledWith('projectless-tasks', 'move', { sessionId: 'source', workspaceId: 'b' })
+    expect(app.archive).not.toHaveBeenCalled()
+    await app.toggle(false)
+    expect([...document.querySelectorAll('button')].some((item) => item.textContent === '移动到工作区…')).toBe(false)
+  })
 
   it('gets the exact native menu session without archiving, cancels safely and follows persisted updates without navigation', async () => {
     const app = await harness()

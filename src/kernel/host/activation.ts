@@ -12,10 +12,24 @@ const NOOP = (): void => undefined
 export class HostPatchActivation {
   private readonly byId: ReadonlyMap<string, HostPatch>
   private readonly disposers = new Map<string, () => void>()
+  private readonly observers: Array<() => void> = []
   private settings: PatchSettings = { ...DEFAULT_PATCH_SETTINGS }
 
   constructor(private readonly ctx: Context, patches: readonly HostPatch[]) {
     this.byId = new Map(patches.map((patch) => [patch.id, patch]))
+    try {
+      for (const patch of patches) {
+        const dispose = patch.observe?.(ctx)
+        if (dispose !== undefined) this.observers.push(dispose)
+      }
+    } catch (error) {
+      const failures = [error]
+      for (const dispose of this.observers.splice(0).reverse()) {
+        try { dispose() } catch (failure) { failures.push(failure) }
+      }
+      if (failures.length > 1) throw new AggregateError(failures, 'patch observation failed')
+      throw error
+    }
   }
 
   apply(next: PatchSettings): void {
@@ -37,7 +51,13 @@ export class HostPatchActivation {
   }
 
   dispose(): void {
-    for (const dispose of [...this.disposers.values()].reverse()) dispose()
+    const disposers = [...this.disposers.values()].reverse()
     this.disposers.clear()
+    disposers.push(...this.observers.splice(0).reverse())
+    const failures: unknown[] = []
+    for (const dispose of disposers) {
+      try { dispose() } catch (error) { failures.push(error) }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, 'patch cleanup failed')
   }
 }

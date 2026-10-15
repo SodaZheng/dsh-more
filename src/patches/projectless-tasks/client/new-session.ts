@@ -6,11 +6,12 @@ import type { PatchActivationSource } from '../../../kernel/client/activation.js
 import { apiErrorText } from '../../../platform/dsh/client/api.js'
 import { PROJECTLESS_TASKS_PATCH_ID } from '../shared.js'
 import { createTaskStarter } from './create-task.js'
+import { clientSessionActions, currentSessionId, type TaskSessionActions } from '../../../platform/dsh/client/runtime.js'
 
 interface Navigation {
   startSession(workspaceId?: WorkspaceId): void
 }
-type Sessions = Pick<ISessions, 'list' | 'create' | 'open'>
+type Sessions = Pick<ISessions, 'list'> & TaskSessionActions
 type Activation = Pick<PatchActivationSource, 'getSnapshot' | 'subscribe'>
 type NewSessionTarget =
   | { kind: 'workspace'; workspaceId: WorkspaceId }
@@ -21,10 +22,11 @@ type NewSessionTarget =
 /** Explicit destinations win; otherwise follow the current page, never project recency. */
 export function newSessionTarget(list: SessionListState, workspaces: WorkspaceSnapshot, explicit?: WorkspaceId): NewSessionTarget {
   if (explicit !== undefined) return { kind: 'workspace', workspaceId: explicit }
-  if (list.current === undefined) return { kind: 'native' }
+  const current = currentSessionId(list)
+  if (current === undefined) return { kind: 'native' }
   if (list.phase !== 'ready' || workspaces.phase !== 'ready') return { kind: 'pending' }
   const visited = new Set<SessionId>()
-  let id: SessionId | undefined = list.current
+  let id: SessionId | undefined = current
   while (id !== undefined && !visited.has(id)) {
     visited.add(id)
     const workspace = workspaces.items.find((item) => item.sessionIds.includes(id!))
@@ -35,7 +37,7 @@ export function newSessionTarget(list: SessionListState, workspaces: WorkspaceSn
     // mistaken for independent tasks just because they have no direct membership.
     if (summary.origin === 'subagent') { id = summary.parentId; continue }
     return typeof summary.cwd === 'string' && summary.cwd.length > 0
-      ? { kind: 'independent', sourceId: list.current }
+      ? { kind: 'independent', sourceId: current }
       : { kind: 'pending' }
   }
   return { kind: 'pending' }
@@ -71,7 +73,8 @@ export function bindNewSessionNavigation({ navigation, sessions, workspaces, act
       }
       if (target.kind === 'pending') {
         cancel()
-        if (list.current !== undefined) reportError(list.current, new Error('会话来源仍在加载，请稍后再新建会话。'))
+        const current = currentSessionId(list)
+        if (current !== undefined) reportError(current, new Error('会话来源仍在加载，请稍后再新建会话。'))
         return
       }
       if (attempt?.sourceId !== target.sourceId) {
@@ -85,7 +88,7 @@ export function bindNewSessionNavigation({ navigation, sessions, workspaces, act
         const destination = newSessionTarget(sessions.list.getSnapshot(), workspaces.list.getSnapshot())
         return destination.kind === 'independent' && destination.sourceId === current.sourceId
       }).catch((error: unknown) => {
-        if (active && attempt === current && sessions.list.getSnapshot().current === current.sourceId) {
+        if (active && attempt === current && currentSessionId(sessions.list.getSnapshot()) === current.sourceId) {
           reportError(current.sourceId, error)
         }
       }).finally(() => { delete current.flight })
@@ -111,7 +114,7 @@ export function installNewSessionNavigation(ctx: Context, activation: Activation
   const sessions: unknown = ctx.sessions
   if (typeof navigation !== 'object' || navigation === null || !('startSession' in navigation) || typeof navigation.startSession !== 'function'
     || typeof sessions !== 'object' || sessions === null || !('create' in sessions) || typeof sessions.create !== 'function'
-    || !('open' in sessions) || typeof sessions.open !== 'function' || !('scope' in sessions) || typeof sessions.scope !== 'function'
+    || !('scope' in sessions) || typeof sessions.scope !== 'function'
     || !('list' in sessions) || typeof sessions.list !== 'object' || sessions.list === null
     || !('getSnapshot' in sessions.list) || typeof sessions.list.getSnapshot !== 'function') {
     throw new Error('当前 DSH 版本不支持跟随会话来源新建任务。')
@@ -119,7 +122,7 @@ export function installNewSessionNavigation(ctx: Context, activation: Activation
   const clientSessions = sessions as Sessions & Pick<ISessions, 'scope'>
   return bindNewSessionNavigation({
     navigation: navigation as Navigation,
-    sessions: clientSessions,
+    sessions: { ...clientSessionActions(ctx), list: clientSessions.list },
     workspaces: ctx.workspaces,
     activation,
     reportError: (sourceId, error) => {

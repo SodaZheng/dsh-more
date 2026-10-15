@@ -37,7 +37,7 @@ describe('native workspace picker', () => {
     const groupingSlots = { inject: vi.fn() }
     clientPatch.install({ inject, slots: groupingSlots, settingsScope: { bind: vi.fn() } } as never, {} as never)
     expect(inject).toHaveBeenCalledOnce()
-    expect(scope.effect).toHaveBeenCalledOnce()
+    expect(scope.effect).toHaveBeenCalledTimes(2)
     expect(scopedSlots.inject.mock.calls.map(([name]) => name)).toEqual(['conversation', 'main.conversation', 'conversation.hero.workspace'])
     expect(groupingSlots.inject.mock.calls[0]?.[0]).toBe('sidebar.workspaces')
   })

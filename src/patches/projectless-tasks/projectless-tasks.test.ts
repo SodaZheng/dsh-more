@@ -41,6 +41,40 @@ describe('native task creation', () => {
     return { sessions, starter: createTaskStarter(sessions) }
   }
 
+  it('retains a desktop generation until its draft is ready and navigation takes ownership', async () => {
+    const { sessions } = setup()
+    let ready!: () => void
+    const reference = { ready: new Promise<void>((resolve) => { ready = resolve }), release: vi.fn() }
+    const retain = vi.fn(() => reference)
+    const transfer = vi.fn(() => { expect(reference.release).not.toHaveBeenCalled() })
+    const starter = createTaskStarter({ ...sessions, retain })
+    const flight = starter.start(transfer)
+    await vi.waitFor(() => expect(retain).toHaveBeenCalledWith(ID))
+    expect(transfer).not.toHaveBeenCalled()
+    expect(sessions.open).not.toHaveBeenCalled()
+    ready()
+    await flight
+    expect(transfer).toHaveBeenCalledOnce()
+    expect(sessions.open).toHaveBeenCalledExactlyOnceWith(ID)
+    expect(reference.release).toHaveBeenCalledOnce()
+  })
+
+  it('releases an in-progress desktop reference when the feature is disabled', async () => {
+    const { sessions } = setup()
+    let reject!: (error: Error) => void
+    const reference = { ready: new Promise<void>((_resolve, fail) => { reject = fail }), release: vi.fn(() => reject(new Error('released'))) }
+    const retain = vi.fn(() => reference)
+    const starter = createTaskStarter({ ...sessions, retain })
+    const transfer = vi.fn()
+    const flight = starter.start(transfer)
+    await vi.waitFor(() => expect(retain).toHaveBeenCalled())
+    starter.dispose()
+    await flight
+    expect(reference.release).toHaveBeenCalledOnce()
+    expect(transfer).not.toHaveBeenCalled()
+    expect(sessions.open).not.toHaveBeenCalled()
+  })
+
   it('deduplicates clicks, supplies cwd without workspaceId, and opens only after create', async () => {
     const { sessions, starter } = setup()
     const first = starter.start()

@@ -7,7 +7,9 @@ import { deleteSessionPermanently } from './session-deletion.js'
 
 export const hostPatch: HostPatch = {
   id: SESSION_DELETE_PATCH_ID,
-  setup: installLiveSessionHandleTracker,
+  // A disabled action still needs to remember handles created during that time.
+  // Track for the plugin lifetime; the API router remains gated by the switch.
+  observe: installLiveSessionHandleTracker,
   routes: ({ ctx }) => ({
     commit: async (payload) => {
       const sessionId = requireString(payload, 'sessionId')

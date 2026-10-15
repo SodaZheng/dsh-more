@@ -9,6 +9,7 @@ import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import { apiErrorText, callPatchApi } from '../../../platform/dsh/client/api.js'
 import { bindSettings } from '../../../platform/dsh/client/settings.js'
+import { installSessionMenuAction } from '../../../platform/dsh/client/session-menu.js'
 import { SESSION_GROUPS_NAMESPACE, EMPTY_GROUPS, decodeSessionGroups, type SessionGroups } from '../groups.js'
 import { PROJECTLESS_TASKS_PATCH_ID } from '../shared.js'
 import { installMoveMenu } from './group-menu.js'
@@ -33,7 +34,7 @@ type SidebarProps = PropsRuntime<'sidebar'> & {
 
 interface Lifetime { subscribe(listener: () => void): () => void; getSnapshot(): boolean }
 const ALWAYS_LIVE: Lifetime = { subscribe: () => () => {}, getSnapshot: () => true }
-export function extendGroupedSidebar(original: ComponentType<SidebarProps>, activation: PatchActivationSource, source: SettingsScope<SessionGroups>, lifetime = ALWAYS_LIVE): ComponentType<SidebarProps> {
+export function extendGroupedSidebar(original: ComponentType<SidebarProps>, activation: PatchActivationSource, source: SettingsScope<SessionGroups>, lifetime = ALWAYS_LIVE, ctx?: Context): ComponentType<SidebarProps> {
   return function GroupedSidebar(props: SidebarProps): JSX.Element {
     const settings = useSyncExternalStore(activation.subscribe, activation.getSnapshot)
     const binding = useMemo(() => ({ subscribe: (listener: () => void) => source.subscribe(listener), getSnapshot: () => source.getSnapshot() }), [])
@@ -48,12 +49,23 @@ export function extendGroupedSidebar(original: ComponentType<SidebarProps>, acti
     const [destination, setDestination] = useState('')
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string>()
+    const groupsRef = useRef(groups)
+    groupsRef.current = groups
+    const requestMove = (id: SessionId): void => {
+      setPending(id)
+      setDestination(groupsRef.current.assignments[id] ?? '')
+      setError(undefined)
+    }
     const intent = useRef(false)
     const inFlight = useRef(false)
     const live = useRef(true)
     useEffect(() => { live.current = true; return () => { live.current = false } }, [])
     useEffect(() => {
       if (!enabled) { setPending(undefined); return }
+      const removeNativeItem = ctx === undefined ? undefined : installSessionMenuAction(ctx, {
+        id: 'dsh-more-session-move', label: '移动到工作区…', order: 350, select: requestMove,
+      })
+      if (removeNativeItem !== undefined) return removeNativeItem
       return installMoveMenu((archive) => {
         intent.current = true
         try { archive.click() } finally { intent.current = false }
@@ -62,9 +74,7 @@ export function extendGroupedSidebar(original: ComponentType<SidebarProps>, acti
     const archiveSession = (id: SessionId): Promise<void> => {
       if (!intent.current) return props.archiveSession(id)
       intent.current = false
-      setPending(id)
-      setDestination(groups.assignments[id] ?? '')
-      setError(undefined)
+      requestMove(id)
       return Promise.resolve()
     }
     const useWorkspaces: SidebarProps['useWorkspaces'] = (select) => select(display)
@@ -123,7 +133,7 @@ export function installSessionGrouping(ctx: Context, activation: PatchActivation
       for (const entry of ctx.slots.entries(SIDEBAR_SLOT)) {
         if (wrapped.has(entry) || entry.children?.['sidebar.workspaces.directoryFlow'] === undefined || typeof entry.component !== 'function') continue
         const original = entry.component as ComponentType<SidebarProps>
-        const component = extendGroupedSidebar(original, activation, source, lifetime)
+        const component = extendGroupedSidebar(original, activation, source, lifetime, ctx)
         wrapped.set(entry, { original, component })
         entry.component = component
       }

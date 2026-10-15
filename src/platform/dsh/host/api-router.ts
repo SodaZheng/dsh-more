@@ -1,7 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-web-app'
-import { PLUGIN_API_PREFIX, PLUGIN_NAME } from '../identity.js'
+import { PLUGIN_API_PREFIX, PLUGIN_MUTATION_HEADER, PLUGIN_NAME } from '../identity.js'
+import { Readable } from 'node:stream'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { DshMoreError } from './error.js'
 import type { HostPatch, HostPatchRuntime, PatchApiHandler } from '../../../kernel/host/patch.js'
 import { isTrustedMutationRequest } from './trust.js'
@@ -32,6 +34,40 @@ export function registerPatchApi(
   const host = ctx as HostContext
   const routes = collectRoutes(patches, { ctx, confirmationSecret })
   const logger = ctx.logger(PLUGIN_NAME)
+  // Desktop 0.2 forwards only authenticated /api Fetch routes to its Host.
+  const connection = (typeof ctx.get === 'function' ? ctx.get('connection') : undefined) as {
+    fetch?: { register(route: { path: string; methods: string[]; requestBody: 'buffered'; fetch(request: Request): Promise<Response> }): () => void }
+  } | undefined
+  if (connection?.fetch?.register !== undefined) {
+    for (const [route, registered] of routes) {
+      connection.fetch.register({
+        path: `${PLUGIN_API_PREFIX}/${route}`,
+        methods: ['POST'], requestBody: 'buffered',
+        fetch: async (request) => {
+          let status = 200
+          let headers: Record<string, string> = {}
+          let body = ''
+          const res = {
+            writeHead(code: number, values: Record<string, string>) { status = code; headers = values },
+            end(value: string) { body = value },
+          } as unknown as ServerResponse
+          try {
+            if (request.headers.get(PLUGIN_MUTATION_HEADER) !== '1') throw new DshMoreError('forbidden', '请求来源不受信任。', 403)
+            if (!isEnabled(registered.patchId)) throw new DshMoreError('patch-disabled', '这个补丁当前已关闭。', 409)
+            const req = (request.body === null ? Readable.from([]) : Readable.fromWeb(request.body as Parameters<typeof Readable.fromWeb>[0])) as unknown as IncomingMessage
+            req.headers = Object.fromEntries(request.headers)
+            requireJsonContentType(req)
+            writeOk(res, await registered.handler(await readJson(req)))
+          } catch (error) {
+            if (!(error instanceof DshMoreError) || error.status >= 500) logger.error('patch API %s failed: %s', route, String(error))
+            writeError(res, error)
+          }
+          return new Response(body, { status, headers })
+        },
+      })
+    }
+    return
+  }
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: PLUGIN_API_PREFIX,

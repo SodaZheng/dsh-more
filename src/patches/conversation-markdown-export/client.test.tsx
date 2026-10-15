@@ -85,6 +85,35 @@ afterEach(async () => {
 })
 
 describe('Markdown export in the native Session more menu', () => {
+  it('survives changed trigger classes, added wrappers and preceding native actions', async () => {
+    const native = nativeMore()
+    native.trigger.className = 'desktop-header-action'
+    const wrapper = native.trigger.parentElement!.appendChild(document.createElement('span'))
+    wrapper.appendChild(native.trigger)
+    native.open()
+    const menu = document.querySelector('[role="menu"]')!
+    const feedback = document.createElement('button')
+    feedback.setAttribute('role', 'menuitem')
+    feedback.textContent = '反馈'
+    menu.prepend(feedback)
+    await render()
+    expect(menuItem()).not.toBeNull()
+    expect(fallback().hidden).toBe(true)
+    await act(async () => menuItem()!.click())
+    expect(callPatchBlobApi).toHaveBeenCalledOnce()
+  })
+
+  it('keeps an export fallback if an opened native menu no longer exposes a compatible row', async () => {
+    const native = nativeMore()
+    native.open()
+    document.querySelector('[role="menuitem"]')!.textContent = 'Changed native download action'
+    await render()
+    expect(menuItem()).toBeNull()
+    expect(fallback().hidden).toBe(false)
+    await act(async () => fallback().click())
+    expect(callPatchBlobApi).toHaveBeenCalledOnce()
+  })
+
   it.each(['下载 Session 日志', 'Download session log'])('adds export below %s and closes only the menu on export', async (label) => {
     const native = nativeMore(label)
     await render()

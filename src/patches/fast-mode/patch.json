@@ -1,0 +1,12 @@
+{
+  "id": "fast-mode",
+  "name": "加速",
+  "description": "在输入框和 /fast 命令中开关加速。响应更快，但会更快消耗额度",
+  "defaultEnabled": true,
+  "order": 550,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.tsx"
+  }
+}

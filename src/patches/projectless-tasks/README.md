@@ -23,14 +23,20 @@
 
 实现全部位于本补丁目录。Host 的 `prepare` 仅校验 UUID 并返回宿主路径，不执行磁盘写入。Client 调用原生 `sessions.create`，保留模型选择、Agent preset、工具和权限机制。它只在会话已打开、工作区列表已加载、cwd 存在且会话不属于任何工作区时移除输入框的工作区门槛；业务 block、加载失败和普通项目会话继续使用原生限制。
 
-`client/adapter.tsx` 和 `client/picker.tsx` 集中保存 RC 兼容代码：同时等待旧版 `conversation` 与新版 `main.conversation`，包装实际存在的 Conversation 和 WorkspacePicker slot，保留原 registration、子 slot、store 及授权。独立选项只加入该菜单的局部展示投影，选择时由补丁截获，绝不写入 Workspace registry 或发送到原生工作区接口；因此原生菜单键盘操作、选中标记、添加目录流程继续有效。标签只修改原生 chip 的文本，并在关闭时恢复。低优先级空白备选注册使安装和卸载通过原生版本订阅触发重绘；卸载按身份恢复组件，不覆盖后续插件的替换。升级 DSH 后需复核这两个适配入口及 `_workspaceLabel` 标签定位。
+`client/adapter.tsx` 和 `client/picker.tsx` 集中保存 RC 兼容代码：同时等待旧版 `conversation` 与新版 `main.conversation`，并检测 DSH `0.1.6` 桌面端新增的 `conversation.content` Factory 接口。旧版包装 Conversation slot，新版通过 `SlotRegistry.hostFace()` 的 `factoryOf` / `subscribeFactory` 访问并包装实际拥有输入框和工作区选择器的 Factory component（不能把底层 `SlotCore.factory()` 当作 `ctx.slots` 方法）；不重复注册 Factory，保留原 definition 身份、局部 slots、注入和 store。WorkspacePicker 继续使用原 slot，保留子 slot 及授权。独立选项只加入该菜单的局部展示投影，选择时由补丁截获，绝不写入 Workspace registry 或发送到原生工作区接口；因此原生菜单键盘操作、选中标记、添加目录流程继续有效。标签只修改原生 chip 的文本，并在关闭时恢复。低优先级空白备选注册使安装和卸载通过原生版本订阅触发重绘；卸载按身份恢复组件，不覆盖后续插件的替换。Factory 订阅同时处理晚注册和原生组件重载；缺少 Factory API 的旧版本自动跳过新适配。升级 DSH 后需复核这两个适配入口及 `_workspaceLabel` 标签定位。
 
-`client/groups.tsx` 仅对 `sidebar.workspaces` 的工作区投影增加手动归组，不修改原生 Controller、Workspace account 或执行语义。会话菜单通过包装该侧栏的 `archiveSession` 回调取得精确会话 ID，移动意图会被截获，普通归档继续调用原方法。Host 同时兼容旧版 persistence header 列表与新版带 revision 的 snapshot 列表；仅保存归组字段，写入失败保留原归组。
+`client/groups.tsx` 仅对 `sidebar.workspaces` 的工作区投影增加手动归组，不修改原生 Controller、Workspace account 或执行语义。DSH 0.1.7 使用原生 `sidebar.workspaces.session.menu.item` 插槽直接接收会话 ID；旧版才包装侧栏的 `archiveSession` 回调。Host 同时兼容旧版 persistence header 列表与新版带 revision 的 snapshot 列表；仅保存归组字段，写入失败保留原归组。
+
+DSH 0.1.7 已将导航从 `sessions.open()` 移到 `uiWorkspace.openSession()`，当前会话由 `retainedBy.mainView` 标识。共享 `platform/dsh/client/runtime.ts` 适配两代接口。新版 `sessions.create()` 只发布目录记录，因此任务创建器先持有独立的临时引用并等待 `ready`，再转移草稿、打开主视图，最后释放临时引用；关闭补丁时也会释放等待中的引用。
 
 `client/new-session.ts` 在显式注入 `uiWorkspace` 后包装公开的 `startSession()` 方法，统一处理侧栏、顶部与其他原生调用者的来源选择。只有独立来源走本补丁创建；明确项目、当前项目及没有选中会话时的默认入口继续调用原方法。关闭或卸载时按属性身份恢复，不覆盖后来安装的其他包装；子 Agent 页面按所属任务判断来源。
 
 验证：`pnpm exec vitest run src/patches/projectless-tasks`，以及仓库 `pnpm run check` 和 `pnpm run package:check`。
 
+桌面端原生注册器集成测试：`DSH_MORE_DESKTOP_ASAR=/path/to/app.asar pnpm exec vitest run src/patches/projectless-tasks/native-factory.test.tsx`。该测试只读安装包，在 happy-dom 中运行其中实际的 SlotCore / Cordis SlotRegistry / React renderer，验证已挂载页面安装补丁后出现独立选项、解除输入框门槛，卸载后恢复；未提供安装包路径时跳过。它不修改安装包、不发送模型请求，也不等同于真实 Electron 窗口的端到端测试。
+
 自动化覆盖菜单局部选项、原生项目回调、×、标签恢复、草稿与图片交接失败保护、创建重试、独立启停与注册清理。已在隔离 DSH Web 验证下拉菜单选择独立任务、× 清除目录、选中标记，以及项目和独立任务双向切换保留未发送草稿；也验证了独立任务页面的侧栏和顶部新会话入口保持独立模式并创建不同目录，项目页面的新会话沿用当前项目。测试实例不配置模型密钥、不发送实际模型请求。使用已有安装时需重新构建、重启 DSH 并刷新浏览器。
 
 本次升级适配使用已安装的 DSH CLI `0.1.5-rc.1`、核心 UI 包 `0.1.5-rc.2` 进行隔离页面验证：× 切换后保留文本草稿，新会话仍为独立目录；历史会话通过菜单在工作区与未分组之间双向移动，弹窗正常关闭，历史和未发送草稿保持可见；归组设置在 Host 重启后恢复。新版文件附件转移、冷会话归组及失败保护由回归测试覆盖。测试与打包检查通过不代表用户正在运行的 Host 已重新加载。
+
+2026-09-26 已补充官方 macOS `0.1.7-rc.2` 真实窗口验证：独立选项、文本草稿交接、不同独立目录的新任务、真实模型回复与自动标题、手动归组和移回未分组均通过。详细结果见 `docs/desktop-compatibility.md`。

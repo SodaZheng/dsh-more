@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { DraftAttachmentId } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { currentSessionId } from '../../../platform/dsh/client/runtime.js'
 
 interface Draft {
   state: { getSnapshot(): { phase: string; draft: string; imageIds?: readonly DraftAttachmentId[]; attachmentIds?: readonly DraftAttachmentId[] } }
@@ -50,7 +51,7 @@ export function transferBeforeOpen(ctx: Context, sourceId: SessionId | undefined
   }
   const sessions = value as Pick<ISessions, 'scope' | 'list'>
   const list = sessions.list.getSnapshot()
-  if (list.current !== sourceId) return false
+  if (currentSessionId(list) !== sourceId) return false
   if (sourceId === undefined || sourceId === targetId) return true
   if (list.byId[sourceId]?.blank !== true) throw new Error('当前会话已开始，请新建会话后选择独立任务。')
   const source = sessions.scope(sourceId)

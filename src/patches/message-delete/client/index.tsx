@@ -9,7 +9,7 @@ import {
 import { IconTrashOutline16 } from '../../../platform/dsh/client/icons.js'
 import { apiErrorText, callPatchApi } from '../../../platform/dsh/client/api.js'
 import type { ConversationHeaderProps, MessageActions, MessageTarget } from '../../../kernel/client/message-actions.js'
-import type { RefreshableSessions } from '../../../platform/dsh/client/runtime.js'
+import { clientSessions, currentSessionId } from '../../../platform/dsh/client/runtime.js'
 import { followSessionHandoff, openSessionWithoutGap } from '../../../platform/dsh/client/session-sync.js'
 import { MESSAGE_DELETE_PATCH_ID, type MessageDeletePreview } from '../shared.js'
 
@@ -54,7 +54,7 @@ export function useMessageActions(
     if (target === null || preview === null) return
     setBusy(true)
     setError(null)
-    const sessions = (props.ctx as unknown as { sessions: RefreshableSessions }).sessions
+    const sessions = clientSessions(props.ctx)
     const continuationSessionId = preview.continuationSessionId as SessionId
     const handoff = followSessionHandoff(sessions, continuationSessionId)
     try {
@@ -73,7 +73,7 @@ export function useMessageActions(
       const sessionList = sessions.list.getSnapshot()
       const sourceAvailable = sessionList.byId[sourceId] !== undefined
       const sourceArchived = props.ctx.workspaces.list.getSnapshot().archivedSessionIds.includes(sourceId)
-      if (sourceAvailable && !sourceArchived && sessionList.current !== sourceId) openSessionWithoutGap(sessions, sourceId)
+      if (sourceAvailable && !sourceArchived && currentSessionId(sessionList) !== sourceId) openSessionWithoutGap(sessions, sourceId)
       setPreview(null)
       setError(apiErrorText(caught))
     } finally {

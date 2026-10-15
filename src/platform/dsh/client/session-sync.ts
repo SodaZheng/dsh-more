@@ -2,6 +2,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { RefreshableSessions, RefreshableWorkspaces } from './runtime.js'
+import { currentSessionId } from './runtime.js'
 
 const INCREMENTAL_SYNC_GRACE_MS = 180
 
@@ -114,7 +115,7 @@ export function adjacentVisibleSession(
   workspaces: WorkspaceSnapshot,
   deletingSessionId: SessionId,
 ): SessionId | undefined {
-  if (sessions.current !== deletingSessionId) return undefined
+  if (currentSessionId(sessions) !== deletingSessionId) return undefined
   const archived = new Set(workspaces.archivedSessionIds)
   const deletingIndex = sessions.ids.indexOf(deletingSessionId)
   for (let index = deletingIndex + 1; index < sessions.ids.length; index += 1) {
