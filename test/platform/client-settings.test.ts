@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { bindSettings, withSettings } from '../../src/platform/dsh/client/settings.js'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsScopeSnapshot } from '../../src/platform/dsh/client/settings.js'
 
 function formHarness() {
   let current: SettingsScopeSnapshot<unknown> = {

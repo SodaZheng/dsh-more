@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import { ToolCallId, createAssistantMessage, createSystemMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId, SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
-import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
+import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { selectMessageDeletion } from './host/message-selection.js'
@@ -49,7 +49,7 @@ describe('message-delete patch', () => {
     session.append('turn/start', { turn: 1 })
     session.append('agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 1, inserted: [] })
     session.append('step/start', { turn: 1, step: 1 })
-    session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('retain system prompt', 'test') }, { surfaceOp: 'append' })
+    session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('retain system prompt') }, { surfaceOp: 'append' })
     const user = session.append('user/message', original, { surfaceOp: 'append' })
     session.append('request/header', { reason: 'initial', header: { config: { provider: 'test', model: 'chosen-model' } } })
     const answer = session.append('assistant/message', { turn: 1, step: 1, stream: [], message: createAssistantMessage({
@@ -83,12 +83,12 @@ describe('message-delete patch', () => {
     const session = Session.create(SessionId('session-delete-replaced-system'))
     session.append('turn/start', { turn: 1 })
     session.append('step/start', { turn: 1, step: 1 })
-    const system = session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('old system', 'test') }, { surfaceOp: 'append' })
+    const system = session.append('system/message', { turn: 1, step: 1, message: createSystemMessage('old system') }, { surfaceOp: 'append' })
     session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'keep user' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
     session.append('step/end', { turn: 1, step: 1 })
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     const second = addTurn(session, 2, 'second')
-    session.append('system/message', { turn: 2, step: 1, message: createSystemMessage('current system', 'test') }, {
+    session.append('system/message', { turn: 2, step: 1, message: createSystemMessage('current system') }, {
       surfaceOp: { op: 'replace', startSeq: system.seq, endSeq: system.seq }, sourceEventSeqs: [system.seq],
     })
     const clean = Session.create(SessionId('session-delete-replaced-system-child'), buildCleanSeed(session, selectMessageDeletion(session, second.assistantSeq)))
@@ -325,7 +325,7 @@ describe('message-delete patch', () => {
     expect(clean.deriveMessages().map((message) => message.content)).toEqual([
       [{ type: 'text', text: 'use tool' }],
       [{ type: 'tool-call', id: callId, name: 'demo', arguments: '{}' }],
-      [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: 'result' }], isError: false }],
+      [{ type: 'text', text: 'result' }],
     ])
   })
 })

@@ -21,8 +21,9 @@ export const hostPatch: HostPatch = {
   setup: (ctx) => {
     const fiber = ctx.inject(['settings'], (scope) => {
       // New hosts project the companion entry's Config under this same namespace.
-      if (typeof scope.settings.register === 'function') {
-        scope.settings.register(SESSION_GROUPS_NAMESPACE, SessionGroupsSchema)
+      const legacy = scope.settings as typeof scope.settings & { register?(namespace: string, schema: typeof SessionGroupsSchema): void }
+      if (typeof legacy.register === 'function') {
+        legacy.register(SESSION_GROUPS_NAMESPACE, SessionGroupsSchema)
       }
     })
     return () => { void fiber.dispose() }

@@ -1,6 +1,6 @@
 import { createElement, useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ConversationSlotProps, ComposerBarOwnerProps, EmptyWorkspaceOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ConversationContentProps, ComposerBarOwnerProps, EmptyWorkspaceOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import { PROJECTLESS_TASKS_PATCH_ID } from '../shared.js'
@@ -43,7 +43,7 @@ export function conversationSlot(name: typeof CONVERSATION_SLOTS[number]): 'main
 
 export function installConversationAdapter(ctx: Context, activation: PatchActivationSource, name: typeof CONVERSATION_SLOTS[number] = 'main.conversation'): () => void {
   const slot = conversationSlot(name)
-  const wrapped = new Map<StoredEntry, { original: unknown; component: ComponentType<ConversationSlotProps> }>()
+  const wrapped = new Map<StoredEntry, { original: unknown; component: ComponentType<ConversationContentProps> }>()
   let live = true
   const listeners = new Set<() => void>()
   const subscribeLifetime = (listener: () => void): (() => void) => {
@@ -53,7 +53,7 @@ export function installConversationAdapter(ctx: Context, activation: PatchActiva
   const sync = (): void => {
     for (const entry of ctx.slots.entries(slot)) {
       if (wrapped.has(entry) || entry.children?.['conversation.composer.bar'] === undefined || typeof entry.component !== 'function') continue
-      const original = entry.component as ComponentType<ConversationSlotProps>
+      const original = entry.component as ComponentType<ConversationContentProps>
       const ProjectlessConversation = wrapConversation(ctx, activation, original, subscribeLifetime, () => live)
       wrapped.set(entry, { original, component: ProjectlessConversation })
       entry.component = ProjectlessConversation
@@ -78,11 +78,11 @@ export function installConversationAdapter(ctx: Context, activation: PatchActiva
 function wrapConversation(
   ctx: Context,
   activation: PatchActivationSource,
-  original: ComponentType<ConversationSlotProps>,
+  original: ComponentType<ConversationContentProps>,
   subscribeLifetime: (listener: () => void) => () => void,
   isLive: () => boolean,
-): ComponentType<ConversationSlotProps> {
-  return function ProjectlessConversation(props: ConversationSlotProps): JSX.Element {
+): ComponentType<ConversationContentProps> {
+  return function ProjectlessConversation(props: ConversationContentProps): JSX.Element {
     const active = useSyncExternalStore(subscribeLifetime, isLive)
     const settings = useSyncExternalStore(activation.subscribe, activation.getSnapshot)
     const workspace = props.useWorkspaces((snapshot) => snapshot)
@@ -112,7 +112,7 @@ function wrapConversation(
         .catch((reason: unknown) => { if (starter.current === operation) setError(apiErrorText(reason)) })
         .finally(() => { if (starter.current === operation) setBusy(false) })
     }
-    const renderSlot: ConversationSlotProps['renderSlot'] = (name, owner, options) => {
+    const renderSlot: ConversationContentProps['renderSlot'] = (name, owner, options) => {
       if (name === 'conversation.composer.bar' && isComposerOwner(owner)) {
         return props.renderSlot('conversation.composer.bar', unlockComposer(owner, independent, block), options)
       }
@@ -149,7 +149,7 @@ export function installConversationFactoryAdapter(ctx: Context, activation: Patc
     || !('factoryOf' in candidate) || typeof candidate.factoryOf !== 'function'
     || !('subscribeFactory' in candidate) || typeof candidate.subscribeFactory !== 'function') return () => {}
   const registry = candidate as FactoryHost
-  const wrapped = new Map<ConversationFactory, { original: unknown; component: ComponentType<ConversationSlotProps> }>()
+  const wrapped = new Map<ConversationFactory, { original: unknown; component: ComponentType<ConversationContentProps> }>()
   let live = true
   const listeners = new Set<() => void>()
   const subscribeLifetime = (listener: () => void): (() => void) => {
@@ -160,7 +160,7 @@ export function installConversationFactoryAdapter(ctx: Context, activation: Patc
     const definition = registry.factoryOf('conversation.content')
     if (definition === undefined || wrapped.has(definition)
       || definition.children?.['conversation.composer.bar'] === undefined || typeof definition.component !== 'function') return
-    const original = definition.component as ComponentType<ConversationSlotProps>
+    const original = definition.component as ComponentType<ConversationContentProps>
     const component = wrapConversation(ctx, activation, original, subscribeLifetime, () => live)
     wrapped.set(definition, { original, component })
     definition.component = component

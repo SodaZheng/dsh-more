@@ -83,7 +83,7 @@ describe('native task creation', () => {
     expect(sessions.open).not.toHaveBeenCalled()
     await first
     expect(callPatchApi).toHaveBeenCalledOnce()
-    expect(sessions.create).toHaveBeenCalledExactlyOnceWith({ sessionId: ID, cwd: `/isolated-home/Documents/DSH/tasks/${ID}` })
+    expect(sessions.create).toHaveBeenCalledExactlyOnceWith({ sessionId: ID, cwd: join('/isolated-home', 'Documents', 'DSH', 'tasks', ID) })
     expect(sessions.open).toHaveBeenCalledExactlyOnceWith(ID)
   })
 

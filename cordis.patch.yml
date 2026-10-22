@@ -2,5 +2,7 @@
 - insert:
     - id: dsh-more-session-groups
       name: dsh-more/session-groups
+    - id: dsh-more/fast-mode
+      name: dsh-more/fast-mode
     - id: dsh-more
       name: dsh-more

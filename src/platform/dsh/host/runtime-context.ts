@@ -10,8 +10,8 @@ function retainedRuntimeContexts(seed: readonly SessionEvent[]): AssembledContex
   for (let index = seed.length - 1; index >= 0; index -= 1) {
     const event = seed[index]
     if (event?.type !== 'user/message') continue
-    const source = event.data.source as { plugin?: unknown; form?: unknown; sections?: unknown }
-    if (source.plugin !== RUNTIME_CONTEXT_PLUGIN) continue
+    const source = event.data.source as { kind?: unknown; plugin?: unknown; form?: unknown; sections?: unknown }
+    if (source.kind !== 'runtime-context' && source.plugin !== RUNTIME_CONTEXT_PLUGIN) continue
     if (source.form === 'snapshot' && Array.isArray(source.sections)) {
       const sections = source.sections.filter((section): section is AssembledContext => {
         const value = section as { name?: unknown; text?: unknown }

@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { Context } from '@deepseek-ai/cordis'
 import type { HostPatch } from '../../../kernel/host/patch.js'
+import { readSettings as readHostSettings } from '../../../platform/dsh/host/settings.js'
+import { Config } from './settings.js'
 import {
   FAST_MODE_PATCH_ID,
   FAST_MODE_SETTINGS_NS,
@@ -37,11 +39,11 @@ let interceptorInstalled = false
 let currentSettings: FastModeSettings = { ...DEFAULT_FAST_MODE_SETTINGS }
 
 export function readSettings(ctx: Context): FastModeSettings {
-  const descriptor = ctx.settings?.describe?.().find((entry: any) => entry.ns === FAST_MODE_SETTINGS_NS)
-  if (!descriptor || typeof descriptor.value !== 'object' || descriptor.value === null) {
+  const value = readHostSettings(ctx, FAST_MODE_SETTINGS_NS)
+  if (typeof value !== 'object' || value === null) {
     return { ...DEFAULT_FAST_MODE_SETTINGS }
   }
-  const val = descriptor.value as Partial<FastModeSettings>
+  const val = value as Partial<FastModeSettings>
   return {
     defaultEnabled: typeof val.defaultEnabled === 'boolean' ? val.defaultEnabled : false,
     serviceTier: typeof val.serviceTier === 'string' && val.serviceTier ? val.serviceTier : 'priority',
@@ -124,20 +126,28 @@ export function installFastModeInterceptor(): void {
   interceptorInstalled = true
   const originalFetch = globalThis.fetch
   globalThis.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    let patched = { input, init }
     try {
-      const patched = patchFastRequest(input, init)
-      return await originalFetch.call(this, patched.input, patched.init)
+      patched = patchFastRequest(input, init)
     } catch (error) {
       console.warn('fast-mode fetch interceptor error, sending the original request', error)
-      return originalFetch.call(this, input, init)
     }
+    // Only preparation may fall back. A rejected fetch may already have sent the
+    // request, so transport/abort failures must propagate without a second call.
+    return originalFetch.call(this, patched.input, patched.init)
   }
 }
 
 export const hostPatch: HostPatch = {
   id: FAST_MODE_PATCH_ID,
   setup: (ctx: Context): (() => void) => {
-    currentSettings = readSettings(ctx)
+    const legacy = ctx.settings as typeof ctx.settings & { register?(namespace: string, schema: typeof Config): void }
+    legacy.register?.(FAST_MODE_SETTINGS_NS, Config)
+    const refreshSettings = (): void => { currentSettings = readSettings(ctx) }
+    refreshSettings()
+    const disposeSettings = ctx.on('settings/document-updated', (namespace) => {
+      if (namespace === FAST_MODE_SETTINGS_NS) refreshSettings()
+    })
     installFastModeInterceptor()
     const dispose = ctx.on('llm/stream' as any, (options: { sessionId?: unknown, purpose?: unknown }, next: () => AsyncIterable<unknown>) => {
       if (options?.purpose === 'session-title' || options?.purpose === 'compaction') return next()
@@ -146,7 +156,10 @@ export const hostPatch: HostPatch = {
       if (!enabled) return next()
       return bindFastStream(next(), { sessionId, isFast: true })
     }, { global: true, prepend: true } as any)
-    return () => { if (typeof dispose === 'function') dispose() }
+    return () => {
+      if (typeof dispose === 'function') dispose()
+      if (typeof disposeSettings === 'function') disposeSettings()
+    }
   },
   routes: ({ ctx }) => ({
     getState: (payload: any) => {
@@ -177,10 +190,9 @@ export const hostPatch: HostPatch = {
         customBodyParams: typeof payload.customBodyParams === 'object' && payload.customBodyParams !== null ? payload.customBodyParams : {},
         customHeaders: typeof payload.customHeaders === 'object' && payload.customHeaders !== null ? payload.customHeaders : {},
       }
+      if (!descriptor || typeof ctx.settings?.mutate !== 'function') throw new Error('加速配置尚未注册，无法保存')
+      await ctx.settings.mutate(FAST_MODE_SETTINGS_NS, [{ op: 'set', path: [], value: next }], descriptor.revision)
       currentSettings = next
-      if (typeof ctx.settings?.mutate === 'function') {
-        await (ctx.settings.mutate as any)(FAST_MODE_SETTINGS_NS, [{ op: 'set', path: [], value: next }], descriptor?.revision ?? 0)
-      }
       return next
     },
   }),

@@ -10,6 +10,11 @@ import { PATCH_SETTINGS_NAMESPACE as SETTINGS_NAMESPACE } from '../../platform/d
 import { liveSetting, settingValue } from '../../platform/dsh/host/settings.js'
 import type { HostPatchActivation } from './activation.js'
 
+export type LegacyInstallSection = <T>(ctx: Context, namespace: string, schema: z<T>, defaults: T, hooks: {
+  setSource(source: () => T): void
+  onChange(): void
+}) => void
+
 export const PATCH_SETTINGS_NAMESPACE = SETTINGS_NAMESPACE
 
 export const PatchConfig = z.object(Object.fromEntries(
@@ -18,7 +23,8 @@ export const PatchConfig = z.object(Object.fromEntries(
 
 /** Bind persisted DSH settings to live Host patch activation. */
 export function installPatchSettings(ctx: Context, activation: HostPatchActivation, config: unknown = DEFAULT_PATCH_SETTINGS): void {
-  if (typeof ctx.settings.installSection !== 'function') {
+  const settings = ctx.settings as typeof ctx.settings & { installSection?: LegacyInstallSection }
+  if (typeof settings.installSection !== 'function') {
     const refresh = (): void => {
       const values = typeof config === 'object' && config !== null
         ? Object.fromEntries(Object.entries(config).map(([key, value]) => [key, settingValue(value)]))
@@ -32,7 +38,7 @@ export function installPatchSettings(ctx: Context, activation: HostPatchActivati
     return
   }
   let source = () => DEFAULT_PATCH_SETTINGS
-  ctx.settings.installSection(ctx, PATCH_SETTINGS_NAMESPACE, PatchSettingsSchema, DEFAULT_PATCH_SETTINGS, {
+  settings.installSection(ctx, PATCH_SETTINGS_NAMESPACE, PatchSettingsSchema, DEFAULT_PATCH_SETTINGS, {
     setSource: (next) => { source = next },
     onChange: () => { activation.apply(source()) },
   })

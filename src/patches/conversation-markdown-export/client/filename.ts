@@ -1,12 +1,15 @@
 function safeStem(value: string): string {
-  return [...value
+  const stem = [...value
     .normalize('NFKC')
     .replace(/[\u0000-\u001f\u007f/\\?%*:|"<>]+/g, '-')
     .replace(/\s+/g, ' ')
     .replace(/^[.\s-]+|[.\s-]+$/g, '')]
     .slice(0, 80)
     .join('')
-    .trim()
+    .replace(/[.\s]+$/g, '')
+  // Windows reserves device names even when followed by an extension. NFKC
+  // above also folds the reserved superscript digits in COM¹ / LPT².
+  return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?: *[.]| *$)/i.test(stem) ? `_${stem}` : stem
 }
 
 export function markdownFilename(title: string, sessionId: string): string {

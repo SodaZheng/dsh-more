@@ -22,6 +22,7 @@ export function settingValue(value: unknown): unknown {
 
 /** Read the public descriptor projection when the legacy settings store is absent. */
 export function readSettings(ctx: Context, namespace: string): unknown {
-  if (typeof ctx.settings.get === 'function') return ctx.settings.get(namespace)
+  const legacy = ctx.settings as typeof ctx.settings & { get?(namespace: string): unknown }
+  if (typeof legacy.get === 'function') return legacy.get(namespace)
   return ctx.settings.describe().find((entry) => entry.ns === namespace)?.value
 }

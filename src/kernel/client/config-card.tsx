@@ -101,7 +101,8 @@ export function installPatchConfigCard(ctx: ClientContext, activation: PatchActi
     }, () => <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}><PatchConfigCard activation={activation} initiallyOpen /></ul>))
     return
   }
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
+  const legacy = ctx.slots as unknown as { inject(name: string, install: () => unknown): void; register(options: { name: string; key: string; priority: number }, component: () => JSX.Element): () => void }
+  legacy.inject('settings.plugin.item', () => legacy.register({
     name: 'settings.plugin.item',
     key: PATCH_SETTINGS_NAMESPACE,
     priority: 90,

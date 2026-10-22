@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsScope } from '../../../platform/dsh/client/settings.js'
 export type {} from '@deepseek-ai/dsh-client-ui-settings'
 import type { PatchActivationSource } from '../../../kernel/client/activation.js'
 import type { ClientPatch } from '../../../kernel/client/patch.js'

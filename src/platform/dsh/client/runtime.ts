@@ -3,7 +3,10 @@ import type { ISessions, SessionListState } from '@deepseek-ai/dsh-api-session-c
 import type { IWorkspaces } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
-export interface RefreshableSessions extends Pick<ISessions, 'list' | 'open'> {
+export type OpenSession = (id: SessionId | undefined) => void
+
+export interface RefreshableSessions extends Pick<ISessions, 'list'> {
+  open: OpenSession
   refresh(): Promise<void>
 }
 
@@ -16,13 +19,15 @@ export interface SessionReference {
   release(): void
 }
 
-export interface TaskSessionActions extends Pick<ISessions, 'create' | 'open'> {
+export interface TaskSessionActions extends Pick<ISessions, 'create'> {
+  open: OpenSession
   retain?(id: SessionId): SessionReference
 }
 
 /** 0.1.7 moved view selection out of the catalog and exposes reference owners. */
 export function currentSessionId(list: SessionListState): SessionId | undefined {
-  if (list.current !== undefined) return list.current
+  const legacy = list as SessionListState & { current?: SessionId }
+  if (legacy.current !== undefined) return legacy.current
   return Object.values(list.byId).find((row) => {
     const retained = (row as typeof row & { retainedBy?: { mainView?: number } }).retainedBy
     return (retained?.mainView ?? 0) > 0
@@ -31,13 +36,13 @@ export function currentSessionId(list: SessionListState): SessionId | undefined 
 
 /** Keep navigation in its owning UI service; never add methods to native Sessions. */
 export function clientSessions(ctx: Context): RefreshableSessions {
-  const sessions = ctx.sessions as unknown as Pick<RefreshableSessions, 'list' | 'refresh'> & { open?: ISessions['open'] }
+  const sessions = ctx.sessions as unknown as Pick<RefreshableSessions, 'list' | 'refresh'> & { open?: OpenSession }
   const navigation: unknown = typeof ctx.get === 'function' ? ctx.get('uiWorkspace') : undefined
-  let open: ISessions['open']
+  let open: OpenSession
   if (typeof sessions.open === 'function') open = (id) => sessions.open!(id)
   else if (typeof navigation === 'object' && navigation !== null
     && 'openSession' in navigation && typeof navigation.openSession === 'function') {
-    const openSession = navigation.openSession as ISessions['open']
+    const openSession = navigation.openSession as OpenSession
     open = (id) => openSession.call(navigation, id)
   } else throw new Error('当前 DSH 版本不支持会话导航，请检查会话接口。')
   return { list: sessions.list, refresh: () => sessions.refresh(), open }

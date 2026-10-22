@@ -1,5 +1,87 @@
 # 桌面端兼容记录
 
+## 2026-10-22：DSH 0.2.1-rc.2 与 Windows 适配
+
+本次保留原有全部功能及工作区已有修改，没有使用 `allow-version` 或关闭补丁来绕过兼容问题。开发 SDK 和锁文件已固定到 `0.2.1-rc.2`，Cordis 4.0.5、Schemastery 3.18.5；既有 `^0.2.1-alpha.5` peer 本身覆盖同版本基线的 RC，不需另加不安全豁免。
+
+### 已发现的问题
+
+| 问题 | 处理 |
+| --- | --- |
+| 构建将 `URL.pathname` 作为 esbuild 工作目录，Windows 盘符以及包含空格、中文、`#`、`%` 的路径会错误 | 统一使用 `fileURLToPath`；在特殊字符目录从不同 cwd 执行真实构建回归 |
+| release 直接 spawn npm，Windows 的 `npm.cmd` 不能作为普通可执行程序启动 | 找到 `npm-cli.js` 后交给 Node 执行；不使用 shell，避免参数中的 `%s`、引号和符号被解释 |
+| Desktop 验收硬编码 macOS 路径，默认 symlink 在 Windows 受权限限制 | 增加 Windows 安装目录/exe 查找与显式路径；目录链接使用 junction；清理重试处理临时文件锁 |
+| Markdown 下载使用 Windows 保留设备名（CON、AUX、COM1 等） | 安全前缀并处理截断后的尾随点，保留普通文件名 |
+| 加速设置缺少配置入口，保存失败前提前改变内存状态 | 补齐原生 Config entry，保存成功后生效；保留会话开关与自定义参数 |
+| 加速拦截器把网络失败也当作准备失败，再发一次原请求；`/fast` 忽略补丁开关 | 网络和取消错误不重复发送；命令可用性和执行均检查实时开关 |
+
+这些是代码中确认的问题；由于没有用户 Windows 报错日志，不能断言每一项都是该机器本次无法使用的直接原因。Web 与 Desktop profile 分离，装到 `web` 不会加载到桌面端，也必须核对。
+
+### 验证与边界
+
+- macOS 上使用 Node **24.22.1** 完成 `npm run check`：清单、peer、类型、**46 个测试文件 / 359 项测试**、**11 项脚本回归**和构建全部通过，无跳过。
+- npm SDK Host 和本机实际安装的 Desktop Host 均为 **0.2.1-rc.2**，隔离验收通过。除历史功能外，新增原生加速设置保存、读取、启停和 loopback HTTP 请求验证，确认发出 `service_tier: priority` 与自定义请求头，关闭补丁时不加速。
+- 隔离 Desktop profile 仍出现上游 telemetry `serviceVersion` 缺失及 analytics 等待警告；插件断言全部通过。原生 UI fixture 图标警告不计作真实窗口验收。
+- 目标 RC 的真实 SDK Host 使用临时 DSH_HOME 和本地模型替身；不读取用户历史或使用模型密钥。检查 bundle 没有被跳过、受认证 Fetch registry、未登录请求 401。
+- Windows 路径语义测试覆盖盘符、UNC、长路径、中文空格、独立任务识别、精确会话目录删除和危险路径拒绝。
+- CI 扩展为 Linux / Windows / macOS × Node 22.19 / 24，并在 Node 24 上跑 SDK Host。**配置 CI 不等于已执行远端 Windows CI；本轮无 Windows 实机逐项验收。**
+- 工作区同期新增的 `terminal-clipboard` 也保留在构建和全量测试中；本次不覆盖其实现。
+
+### Windows 重跑和安装
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run test:runtime
+# 可选：检查这台机器实际安装的 Desktop，不是 npm SDK
+$env:DSH_MORE_DESKTOP_APP = "C:\实际安装目录\DeepSeek Harness.exe"
+pnpm run test:desktop
+npm pack
+```
+
+把生成的包安装到**实际使用的 profile**；桌面端需先完整退出，并使用 Desktop 自带 `dsh`（不是 npm 通用 CLI）：
+
+```powershell
+Get-Command dsh | Select-Object Source
+dsh --version
+dsh plugin --profile desktop add "C:\Downloads\dsh-more-0.1.1.tgz"
+dsh plugin --profile desktop list dsh-more --depth 0
+```
+
+重新打开 Desktop 后，在设置里确认所有补丁开关，再用测试会话验收：编辑续跑、用户/助手消息删除、冷/实时会话永久删除、模型能力保存、加速及 `/fast`、Markdown 下载、自动标题、独立任务和手动归组；检查源会话历史保留，开关关闭/恢复和重启后的配置持久化。终端复制粘贴按其当前工作区功能单独验证。
+
+本次修复尚未发布 npm；不能用 `dsh-more@latest` 代替这里的本地修复包。没有重启或修改用户正在运行的 DSH，也没有提交/推送代码。
+
+## 2026-10-16：适配 DSH 0.2.1-alpha.5
+
+npm 的 `alpha` 标签在本轮查询时为 `0.2.1-alpha.5`。本轮修改：
+
+- 宿主 DSH peer 保留既有 RC 分支，并增加 `^0.2.1-alpha.5`；Cordis/Schemastery 也显式允许对应 alpha。开发 SDK 与锁文件统一固定在已验证的 alpha，不用全量预发布豁免。
+- 移除已被 alpha 删除的 `webRuntime` 强注入，避免插件永久等待服务；Host 与插件清单的注入声明保持一致，并等待 `connection` 就绪。
+- 预设类型依赖从已停止发布的 `dsh-agent-presets` 迁到 `dsh-agent-preset-registry`，保留原有 `agentPresets.composeFrom` 的精确代际继承。
+- 设置、会话导航、旧菜单插槽统一收敛到适配层；内容 Factory 改用正式 `ConversationContentProps`，不再借用已变窄的 shell props。
+- 导出兼容 alpha 的一等工具结果消息及旧版包裹内容，正确保留失败标记；续跑上下文同时识别新版 `runtime-context` 来源与旧版插件来源。
+- 测试改用真实 SettingsForms（仅配置文档 IO 为内存替身），原生 SlotRegistry/renderer/ConversationContent 默认读取固定 SDK；不再因没有 Desktop 安装包而跳过。
+
+验证范围：
+
+- 类型检查、全量 Vitest **41 个文件、296 项测试通过，无跳过**，包含原生 alpha 客户端模块。
+- 隔离 alpha Host 与本机 Desktop `0.2.0-rc.2` 均通过导出、编辑续跑、删除重建、原历史保留、归组持久化、永久删除、补丁开关、模型能力保存/冲突及标题中间件验收；同时断言 bundle 未被跳过、路由进入认证 Fetch registry、未登录请求返回 401。
+- 两种 Host 验收只用临时 DSH_HOME 和模型替身；未使用用户密钥或修改用户会话。隔离 desktop composition 仍会报告上游 telemetry serviceVersion 缺失及 analytics 等待警告，与插件断言无关。
+- 原生内容测试的图标替身有 React 属性警告，不影响功能断言。现有 RC 安装包的原生客户端两项回归也通过。
+- `pnpm run check`、peer 检查、构建、`npm pack --dry-run` 和 diff 空白检查均通过。本机最终源码验证使用现有 Node.js 26.3.0；已配置 Node 22/24 CI，但本轮未执行远端 CI。宿主自带的签名 Node 24 因 macOS 库验证拒载 npm 的 rolldown 原生绑定，未通过修改签名或关闭安全检查绕过。
+
+重跑：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run test:runtime  # 固定 npm alpha Host；已加入 CI Node 24
+pnpm run test:desktop  # 本机 Desktop 安装包
+```
+
+本轮没有替换或重启用户的 DSH，没有 alpha 真实窗口逐项点击验收，也未发布 npm、提交或推送。已有本地链接安装需重启 DSH 并刷新页面，让新 peer、Host 与 Client 一起加载。
+
 ## 2026-10-15：适配 Desktop 0.2.0-rc.2
 
 本次确认并修复两层失效，未使用版本豁免绕过 DSH 的兼容检查：

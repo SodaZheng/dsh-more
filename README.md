@@ -6,7 +6,7 @@ Practical, independently switchable patches for missing context and history cont
 
 `dsh-more` integrates with the existing DSH interface instead of adding a separate management dashboard. Its current patch set can edit a user message and restart from that point, remove one message while preserving the surrounding context, and permanently delete a session while leaving native archive behavior intact.
 
-> **Compatibility:** development dependencies target DeepSeek Harness `0.1.5-rc.2` and require Node.js `>= 24`. The current source has also been verified in a local linked installation of the official macOS desktop `0.1.7-rc.2`. DSH is still a release candidate, so upgrades may require adapter changes.
+> **Compatibility:** the development/test baseline is DeepSeek Harness `0.2.1-rc.2`. All patches and existing peer ranges are preserved. Type, feature and isolated Host checks pass against the target RC; Windows path/build/script fixes are not a claim of Windows Desktop end-to-end verification. Node.js 24+ is recommended; the package engine also allows Node.js 22.19+.
 
 ## Features
 
@@ -16,6 +16,10 @@ Practical, independently switchable patches for missing context and history cont
 | Delete one message | User- and assistant-message action rows | Removes the selected model-surface node, expands only when tool call/result pairing requires it, rebuilds the surviving context, and opens a child session | On |
 | Permanently delete session | Separate item beside the native Archive action | Stops and unloads the target session, removes its exact JSONL persistence directory, detaches it from workspaces, and synchronizes the lists incrementally | On |
 | Model capabilities | Settings → Models → Model capabilities | Configure image support, selectable thinking types and parameter formats per model | On |
+| Fast mode | Composer toolbar and `/fast` | Toggle faster model service for the current session (may consume quota faster) | On |
+| Markdown export | Conversation toolbar / More menu | Export messages and tool results with Windows-safe download filenames | On |
+| Automatic titles | After the first request | Generate a title using the current model, preserving manual names | On |
+| Independent tasks and grouping | Workspace picker / session menu | Create an independent task with its draft intact; group sessions without changing their working directories | On |
 
 Patch switches live under **Settings → Plugins → Plugin configuration → DSH More** and take effect without rebuilding the plugin.
 
@@ -24,10 +28,23 @@ Patch switches live under **Settings → Plugins → Plugin configuration → DS
 ### Requirements
 
 - Node.js `>= 24`
-- A working `dsh` CLI and a Web profile compatible with DSH `0.1.5-rc.2`
+- A working `dsh` CLI and a Web or Desktop profile on DeepSeek Harness `0.2.1-rc.2`
 - Access to the npm registry that publishes `dsh-more`
 
 pnpm is needed only when installing or developing from source. For a published release, use the DSH plugin command so the package is installed into the selected DSH profile; do not install it globally with `npm install -g`.
+
+### Windows: install this unreleased fix
+
+The existing npm release is not this working-tree fix. Build a tarball with `pnpm install --frozen-lockfile`, `pnpm run check`, `pnpm run test:runtime`, then `npm pack`, or copy the resulting tarball from another machine.
+
+For Desktop, initialize the app once, fully quit it, and use the **Desktop-supplied `dsh` command** (verify `Get-Command dsh` and `dsh --version`) to run:
+
+```powershell
+dsh plugin --profile desktop add "C:\Downloads\dsh-more-0.1.1.tgz"
+dsh plugin --profile desktop list dsh-more --depth 0
+```
+
+The generic npm CLI rejects the reserved Desktop profile; use the installed Desktop carrier instead of replacing its profile. For a browser Web service, use `--profile web` and restart the original `dsh web`. Web and Desktop profiles are separate. Reopen Desktop / reload the browser and check all DSH More switches. Quote paths containing spaces or non-ASCII characters. Windows Desktop manual acceptance is still required; see the [compatibility record](./docs/desktop-compatibility.md).
 
 ### Install the latest release from npm
 
@@ -235,14 +252,14 @@ Generated source, `dist/`, and tarballs are not committed. `prepack` runs the co
 
 ### Dependency updates
 
-`package.json` uses compatible version ranges so installs and updates can resolve newer versions within those ranges. `pnpm-lock.yaml` preserves reproducible builds; a normal install keeps already locked versions. To refresh dependencies and validate them:
+`package.json` declares compatible Host peer ranges, but pins the DSH development SDK to `0.2.1-rc.2` (with Cordis 4.0.5, Schemastery 3.18.5 and Zod 4.4.3). `pnpm-lock.yaml` preserves the verified graph. When changing the SDK baseline, update these pins together, reinstall, and validate:
 
 ```sh
 pnpm update
 pnpm run check
 ```
 
-The DSH range `^0.1.5-rc.2` accepts later stable `0.1.x` releases and newer `0.1.5` RCs. It does not cross into `0.2` or include alpha/RC releases with a different version tuple.
+DSH Host peers use `^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-alpha.5`. The `^0.2.1-alpha.5` range includes `0.2.1-rc.2` on the same version tuple, without bypassing compatibility checks. Prereleases on other version tuples still require verification.
 
 ### Verification scope
 
@@ -254,9 +271,9 @@ The repository does not currently contain a full browser end-to-end suite agains
 
 See the [desktop verification record](./docs/desktop-compatibility.md) for the actual macOS `0.1.7-rc.2` window checks. The desktop adapter navigates through `uiWorkspace.openSession()`, reads current selection from `retainedBy.mainView`, and temporarily retains newly created Sessions until their drafts can be transferred. Independent tasks, edit/delete handoffs, and current-session deletion share this adapter.
 
-Development and host dependency ranges use `^0.1.5-rc.2`; the lockfile records the versions currently verified. The adapters and tests cover the current session format, message provenance, `main.conversation` slot, and JSONL persistence snapshots and location capability. For an existing local linked install, rebuild, restart DSH, and reload the page to load both the new Host and Client.
+Development uses the pinned `0.2.1-rc.2` SDK; Host peer ranges preserve existing RC/alpha compatibility. The removed `webRuntime` service is no longer required; requests use the authenticated Connection Fetch registry. Settings adapters support ConfigForms/SettingsForms and the previous APIs. The adapters and tests cover the current session format, message provenance, `main.conversation` slot, and JSONL persistence snapshots and location capability. For an existing local linked install, rebuild, restart DSH, and reload the page to load both the new Host and Client.
 
-- The current dependency set targets DSH `0.1.5-rc.2`; pre-release API or DOM changes can require adapter updates.
+- The current test baseline is DSH `0.2.1-rc.2`; future pre-release API or DOM changes can require adapter updates. Run `pnpm run test:runtime` for isolated RC Host integration checks (temporary profile and fake model; no user history or credentials).
 - In-product DSH More copy is currently primarily Simplified Chinese, although native Copy/Archive selectors recognize both Chinese and English labels.
 - Message actions operate only on ordinary user messages and assistant messages still present in the current model surface; editing requires a completed owning turn.
 - Permanent deletion requires a `jsonl` backend with a valid location capability. Its current `locate` hook is internal; the adapter checks its presence and result. Tests cover plain and Zstandard-compressed session files.

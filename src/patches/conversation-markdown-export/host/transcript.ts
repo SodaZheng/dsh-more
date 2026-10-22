@@ -48,7 +48,10 @@ function imageDescription(block: Extract<ContentBlock, { type: 'image' }>): stri
   return `[${name}；附件 ID：${String(attachment.attachmentId)}；${attachment.mediaType}；${String(attachment.width)}×${String(attachment.height)}；${String(attachment.bytes)} 字节]`
 }
 
-function contentBlockMarkdown(block: ContentBlock): string {
+interface LegacyToolResult { type: 'tool-result'; isError?: boolean; content: readonly TranscriptBlock[] }
+type TranscriptBlock = ContentBlock | LegacyToolResult
+
+function contentBlockMarkdown(block: TranscriptBlock): string {
   switch (block.type) {
     case 'text':
       return block.text
@@ -69,7 +72,7 @@ function contentBlockMarkdown(block: ContentBlock): string {
   }
 }
 
-function contentMarkdown(content: readonly ContentBlock[]): string {
+function contentMarkdown(content: readonly TranscriptBlock[]): string {
   if (content.length === 0) return '（空消息）'
   const parts: string[] = []
   for (const block of content) {
@@ -84,9 +87,9 @@ function messageSection(label: string, time: number, body: string): string {
 }
 
 function sourceLabel(event: Extract<SessionEvent, { type: 'user/message' }>): string {
-  const source = event.data.source
+  const source = event.data.source as { kind: string; plugin?: string }
   if (source.kind === 'user') return '用户'
-  if (source.kind === 'plugin') return `上下文 · ${singleLine(source.plugin) || '插件'}`
+  if (source.kind === 'plugin') return `上下文 · ${singleLine(source.plugin ?? '') || '插件'}`
   return '上下文'
 }
 
@@ -126,8 +129,8 @@ export function conversationMarkdown(
     }
     if (event.type === 'tool/result') {
       const callId = String(event.data.message.source.callId)
-      const block = event.data.message.content[0]
-      const failed = block?.type === 'tool-result' && block.isError === true
+      const block = (event.data.message.content as readonly TranscriptBlock[])[0]
+      const failed = event.data.message.isError === true || (block?.type === 'tool-result' && block.isError === true)
       const resultContent = block?.type === 'tool-result' ? block.content : event.data.message.content
       const name = singleLine(callNames.get(callId) ?? callId) || '未命名工具'
       sections.push(messageSection(

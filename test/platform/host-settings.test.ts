@@ -20,7 +20,9 @@ describe('settings API adapter', () => {
 
   it('preserves old schemas and reads only actual references', () => {
     const schema = z.boolean().default(true)
-    expect(liveSetting(schema)).toBe(schema)
+    expect(liveSetting(schema).meta.volatile).toBe(true)
+    const legacy = { type: 'boolean' } as unknown as typeof schema
+    expect(liveSetting(legacy)).toBe(legacy)
     expect(settingValue(false)).toBe(false)
     expect(settingValue({ get: () => false })).toBe(false)
     expect(settingValue({ get: 'value' })).toEqual({ get: 'value' })

@@ -22,7 +22,7 @@ afterEach(async () => {
 
 const project: WorkspaceView = { workspaceId: 'project' as WorkspaceView['workspaceId'], title: 'dsh-more', path: '/code/dsh-more', sessionIds: [], createdAt: '', updatedAt: '' }
 function snapshot(items: WorkspaceView[] = [project]): WorkspaceSnapshot {
-  return { items, archivedSessionIds: [], phase: 'ready', state: 'idle', error: null }
+  return { items, pinnedSessionIds: [], archivedSessionIds: [], phase: 'ready', state: 'idle', error: null }
 }
 
 describe('native workspace picker', () => {

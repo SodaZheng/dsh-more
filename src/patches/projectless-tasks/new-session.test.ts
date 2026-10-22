@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { ISessions, SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ISessions, SessionListState as NativeSessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+type SessionListState = NativeSessionListState & { current: SessionId | undefined; currentAddress?: undefined; subagentsByParent: Record<string, never>; jobsBySession: Record<string, never> }
 import type { WorkspaceId, WorkspaceSnapshot, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { DEFAULT_PATCH_SETTINGS } from '../../generated/patch-catalog.js'
 import { callPatchApi } from '../../platform/dsh/client/api.js'
@@ -15,24 +16,31 @@ const sourceId = sid('independent')
 const projectSession = sid('project-session')
 const projectId = wid('project')
 const summary = (id: SessionId, extra: Partial<SessionSummary> = {}): SessionSummary => ({
-  id, displayTitle: String(id), cwd: '/ordinary-folder', running: false, blank: false, updatedAt: 0, ...extra,
+  id, retainedBy: {}, displayTitle: String(id), cwd: '/ordinary-folder', running: false, blank: false, updatedAt: 0, ...extra,
 })
 function sessionList(current: SessionId | undefined = sourceId): SessionListState {
   return {
     current, ids: [sourceId, projectSession], byId: {
       [sourceId]: summary(sourceId, { cwd: '/Documents/DSH/tasks/previous-task' }),
       [projectSession]: summary(projectSession, { cwd: '/repo' }),
-    }, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    }, phase: 'ready', projectionsBySession: {}, subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
   }
 }
 const project: WorkspaceView = { workspaceId: projectId, path: '/repo', title: 'Project', sessionIds: [projectSession], createdAt: '', updatedAt: '' }
 function workspaceList(): WorkspaceSnapshot {
-  return { items: [project], archivedSessionIds: [], phase: 'ready', state: 'idle', error: null }
+  return { items: [project], pinnedSessionIds: [], archivedSessionIds: [], phase: 'ready', state: 'idle', error: null }
 }
 const disposers: Array<() => void> = []
 afterEach(() => { disposers.splice(0).reverse().forEach((dispose) => dispose()); vi.resetAllMocks(); vi.unstubAllGlobals() })
 
 describe('New Session destination', () => {
+  it.each(['C:\\Users\\测试 User\\Documents\\DSH\\tasks\\one', '\\\\server\\share\\ordinary-folder', 'C:/ordinary-folder'])('recognizes Windows independent directories without requiring a POSIX path: %s', (cwd) => {
+    const list = sessionList()
+    list.byId[sourceId] = summary(sourceId, { cwd })
+    expect(newSessionTarget(list, workspaceList())).toEqual({ kind: 'independent', sourceId })
+    expect(newSessionTarget(list, { ...workspaceList(), items: [{ ...project, sessionIds: [sourceId] }] })).toEqual({ kind: 'workspace', workspaceId: projectId })
+  })
+
   it('keeps independent pages independent even when a recent project exists', () => {
     expect(newSessionTarget(sessionList(), workspaceList())).toEqual({ kind: 'independent', sourceId })
     const blank = sessionList()
@@ -49,7 +57,7 @@ describe('New Session destination', () => {
     expect(newSessionTarget({ ...sessionList(), phase: 'pending' }, workspaceList())).toEqual({ kind: 'pending' })
     expect(newSessionTarget(sessionList(), { ...workspaceList(), phase: 'pending' })).toEqual({ kind: 'pending' })
     expect(newSessionTarget(sessionList(sid('missing')), workspaceList())).toEqual({ kind: 'pending' })
-    expect(newSessionTarget({ ...sessionList(), current: undefined }, workspaceList())).toEqual({ kind: 'native' })
+    expect(newSessionTarget({ ...sessionList(), current: undefined } as SessionListState, workspaceList())).toEqual({ kind: 'native' })
   })
 
   it('follows child-agent ownership and fails closed on broken lineage', () => {
@@ -74,7 +82,8 @@ function harness() {
   // The shipped navigation method is inherited from the service prototype.
   const navigation: { startSession(workspaceId?: WorkspaceId): void } = Object.create({ startSession: original })
   const create = vi.fn<NonNullable<Pick<ISessions, 'create'>['create']>>(async () => taskId)
-  const open = vi.fn((id: SessionId) => {
+  const open = vi.fn((id: SessionId | undefined) => {
+    if (id === undefined) return
     list = { ...list, current: id, byId: { ...list.byId, [id]: summary(id) } }
   })
   const reportError = vi.fn()

@@ -2,6 +2,10 @@
 
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { npmCommand } from "./npm-command.mjs";
+
+const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 
 const REGISTRY = "https://registry.npmjs.org/";
 const BUMPS = new Set(["patch", "minor", "major"]);
@@ -12,8 +16,14 @@ function fail(message) {
 }
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: process.cwd(),
+  let invocation;
+  try {
+    invocation = command === "npm" ? npmCommand(args) : { command, args };
+  } catch (error) {
+    fail(error.message);
+  }
+  const result = spawnSync(invocation.command, invocation.args, {
+    cwd: projectRoot,
     encoding: "utf8",
     stdio: options.capture ? "pipe" : "inherit",
   });

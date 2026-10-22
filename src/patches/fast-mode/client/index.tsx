@@ -218,10 +218,12 @@ export const clientPatch: ClientPatch = {
               label: () => '加速',
               description: () => '开启或关闭当前会话的加速。响应更快，但会更快消耗额度',
               available: (session: any) =>
-                sessions?.subagentAddress?.(session.sessionId) === undefined,
+                activation.getSnapshot()[FAST_MODE_PATCH_ID]
+                && sessions?.subagentAddress?.(session.sessionId) === undefined,
               ui: {
                 kind: 'action',
                 run: (session: any) => {
+                  if (!activation.getSnapshot()[FAST_MODE_PATCH_ID]) return
                   void toggleFastMode(ctx, String(session.sessionId))
                 },
               },

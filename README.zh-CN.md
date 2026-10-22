@@ -6,7 +6,7 @@
 
 `dsh-more` 不创建平行的“管理中心”，而是把能力直接嵌入 DSH 现有界面。当前补丁可以编辑用户消息并从该处重新开始、在保留前后上下文的前提下删除单条消息，以及在不改变原生归档语义的情况下永久删除会话。
 
-> **兼容性：** 开发依赖基线为 DeepSeek Harness `0.1.5-rc.2`，要求 Node.js `>= 24`。当前源码也已在官方 macOS 桌面端 `0.1.7-rc.2` 本地链接安装中验证。DSH 仍是 RC 版本，升级后可能需要调整集中适配层。
+> **兼容性：** 开发与测试基线为 DeepSeek Harness `0.2.1-rc.2`。保留全部补丁及已有 peer 兼容范围，已通过目标 RC 的类型、功能和隔离 Host 验收；Windows 路径、构建与脚本兼容修复不等同于 Windows Desktop 实机逐项验收。推荐 Node.js 24+；包引擎也允许 Node.js 22.19+。
 
 ## 功能概览
 
@@ -17,6 +17,9 @@
 | 永久删除会话 | 原生“归档会话”旁的独立菜单项 | 停止并卸载目标会话，移除其精确 JSONL 持久化目录，从 Workspace 脱离并增量同步列表 | 开启 |
 | 模型能力配置 | 设置 → 模型 → 模型能力 | 按模型配置识图、可选思考类型及接口参数格式，不自动猜测能力 | 开启 |
 | 加速 | 输入框工具栏与 `/fast` 命令 | 开关当前会话的加速。响应更快，但会更快消耗额度 | 开启 |
+| Markdown 导出 | 会话工具栏 / 更多操作 | 导出消息与工具结果，下载文件名兼容 Windows | 开启 |
+| 自动标题 | 新会话首次需求后 | 用当前模型生成标题，保留手动命名 | 开启 |
+| 独立任务与手动归组 | 工作区下拉框 / 会话菜单 | 保留草稿创建独立任务；归组不改变工作目录 | 开启 |
 
 补丁开关位于 **设置 → 插件 → 插件配置 → DSH More**，修改后实时生效，无需重新构建插件。
 
@@ -25,10 +28,37 @@
 ### 环境要求
 
 - Node.js `>= 24`
-- 可正常使用的 `dsh` CLI，以及与 DSH `0.1.5-rc.2` 兼容的 Web profile
+- 可正常使用的 `dsh` CLI，以及 DeepSeek Harness `0.2.1-rc.2` 的 Web 或 Desktop profile
 - 能访问发布 `dsh-more` 的 npm registry
 
 只有从源码安装或参与开发时才需要 pnpm。安装已发布版本时，应通过 DSH 插件命令把包加入指定 profile；不要使用 `npm install -g` 全局安装。
+
+### Windows 安装本次修复（尚未发布到 npm）
+
+不要把 npm 上的旧包当成本次修复版。可将本仓库构建的 `dsh-more-0.1.1.tgz` 复制到 Windows 后安装；也可在 Windows 源码目录执行：
+
+```powershell
+node --version
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run test:runtime
+npm pack
+```
+
+- **桌面应用**：先启动 Desktop 一次完成初始化，再完整退出。使用 **Desktop 安装附带的 `dsh` 命令**，确认 `dsh --version` 为 `0.2.1-rc.2`，然后安装到 `desktop` profile：
+
+```powershell
+Get-Command dsh | Select-Object Source
+dsh --version
+dsh plugin --profile desktop add "C:\Downloads\dsh-more-0.1.1.tgz"
+dsh plugin --profile desktop list dsh-more --depth 0
+```
+
+若提示 desktop 由 Electron 专属管理，说明调用的是 npm 安装的通用 CLI，而非 Desktop 的配套命令；请切换命令来源，不要重建或覆盖 Desktop profile。
+
+- **浏览器 Web 服务**：改用 `dsh plugin --profile web add "C:\Downloads\dsh-more-0.1.1.tgz"`，之后重启原来的 `dsh web`。
+
+安装后重新打开 Desktop / 刷新 Web 页面，在 **设置 → 插件 → 插件配置 → DSH More** 确认所有补丁开关。Web 与 Desktop 是不同 profile，安装到 web 不会自动影响桌面应用。路径含空格或中文时务必加引号。本次没有修改用户 DSH 安装或会话，也没有发布 npm；Windows 实机逐项验收仍需执行，见[兼容记录](./docs/desktop-compatibility.md)。
 
 ### 从 npm 安装最新版
 
@@ -236,14 +266,14 @@ pnpm run package        # 构建并生成 npm tarball
 
 ### 依赖更新
 
-`package.json` 使用兼容版本范围，允许安装或更新时解析范围内的新版本；`pnpm-lock.yaml` 保留可复现的构建结果，普通安装不会自动改写已经锁定的版本。更新依赖并验证：
+`package.json` 的宿主 peer 使用兼容范围；DSH 开发 SDK 则固定为 `0.2.1-rc.2`，并同步固定 Cordis 4.0.5、Schemastery 3.18.5 与 Zod 4.4.3，避免不同版本类型混用。`pnpm-lock.yaml` 保留已验证依赖图。更换 SDK 基线时应一起更新这些固定版本，重新安装并验证：
 
 ```sh
 pnpm update
 pnpm run check
 ```
 
-DSH 的 `^0.1.5-rc.2` 接受后续 `0.1.x` 正式版本和 `0.1.5` 的更新 RC，不自动跨入 `0.2`，也不包含其他版本基线的 alpha/RC。
+宿主 DSH peer 使用 `^0.1.5-rc.2 || ^0.2.0-rc.2 || ^0.2.1-alpha.5`。其中 `^0.2.1-alpha.5` 包含同一版本基线的 `0.2.1-rc.2`，不需要禁用版本检查；不同版本基线的预发布版仍需重新验证。
 
 ### 验证范围
 
@@ -255,9 +285,9 @@ DSH 的 `^0.1.5-rc.2` 接受后续 `0.1.x` 正式版本和 `0.1.5` 的更新 RC�
 
 官方 macOS 桌面端 `0.1.7-rc.2` 的实际窗口验证记录见 [桌面端兼容检查](./docs/desktop-compatibility.md)。新版使用 `uiWorkspace.openSession()` 导航，以 `retainedBy.mainView` 识别当前会话；创建后通过临时 Session reference 等待草稿可用，完成交接后释放。独立任务、消息编辑/删除后的跳转和当前会话删除共用该适配。
 
-开发与宿主依赖统一使用 `^0.1.5-rc.2`，锁文件记录当前已验证版本。已适配新版会话格式、消息来源字段、`main.conversation` 插槽，以及 JSONL 后端的持久化快照和定位能力。已有本地链接安装在重新构建后，需要重启 DSH 并刷新页面以加载新的 Host 和 Client。
+开发 SDK 固定在 `0.2.1-rc.2`；宿主 peer 保留已有 RC/alpha 兼容范围。插件不再强依赖已移除的 `webRuntime`，请求走受认证的 Connection Fetch registry；设置层同时兼容 ConfigForms/SettingsForms 与旧接口。已适配新版会话格式、消息来源字段、`main.conversation` 插槽，以及 JSONL 后端的持久化快照和定位能力。已有本地链接安装在重新构建后，需要重启 DSH 并刷新页面以加载新的 Host 和 Client。
 
-- 当前依赖面向 DSH `0.1.5-rc.2`；预发布 API 或 DOM 变化可能要求更新 adapter。
+- 当前测试基线为 DSH `0.2.1-rc.2`；后续预发布 API 或 DOM 变化仍可能要求更新 adapter。`pnpm run test:runtime` 会用临时 profile 和模型替身运行隔离 RC Host 验收，不使用用户历史或密钥。
 - DSH More 的产品内文案目前以简体中文为主；对 DSH 原生 Copy/Archive 元素的定位同时识别中英文标签。
 - 消息操作只面向仍在当前 model surface 中的普通用户消息和助手消息；编辑要求所属轮次已经完成。
 - 永久删除只支持提供有效定位能力的 `jsonl` 后端；当前后端的 `locate` 为内部接口，调用前会检查能力及返回值，测试覆盖普通和 Zstandard 压缩会话文件。

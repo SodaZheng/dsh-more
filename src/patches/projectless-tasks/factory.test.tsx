@@ -2,7 +2,7 @@
 import { act, createElement, type ComponentType } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationSlotProps, ComposerBarOwnerProps, EmptyWorkspaceOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ConversationContentProps, ComposerBarOwnerProps, EmptyWorkspaceOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { DEFAULT_PATCH_SETTINGS } from '../../generated/patch-catalog.js'
@@ -33,7 +33,7 @@ function activation() {
     }) },
   }
 }
-function definition(component: ComponentType<ConversationSlotProps> = () => null) {
+function definition(component: ComponentType<ConversationContentProps> = () => null) {
   return {
     name: 'conversation.content', scope: 'session-maybe', component,
     children: {
@@ -116,7 +116,7 @@ describe('desktop conversation.content factory compatibility', () => {
 
   it.each(['hero', 'composer'] as const)('unlocks the %s factory composer and supplies picker context while preserving native props and blocks', async (variant) => {
     const state = activation()
-    const workspace: WorkspaceSnapshot = { phase: 'ready', state: 'idle', error: null, items: [], archivedSessionIds: [] }
+    const workspace: WorkspaceSnapshot = { phase: 'ready', state: 'idle', error: null, items: [], pinnedSessionIds: [], archivedSessionIds: [] }
     const useWorkspaces = (select: (value: WorkspaceSnapshot) => unknown) => select(workspace)
     const Picker = extendWorkspacePicker((props: PropsRuntime<'conversation.hero.workspace'>) => {
       const data = props.useWorkspaces((value) => value)
@@ -124,7 +124,7 @@ describe('desktop conversation.content factory compatibility', () => {
     })
     const gated: ComposerBarOwnerProps = { variant, disabled: true, onRequestWorkspace: vi.fn(), placeholder: 'Choose workspace' }
     const owner: EmptyWorkspaceOwnerProps = { open: true, onPick: vi.fn(), onClose: vi.fn() }
-    const native = vi.fn((props: ConversationSlotProps) => <>
+    const native = vi.fn((props: ConversationContentProps) => <>
       {props.renderSlot('conversation.composer.bar', gated)}
       {props.renderSlot('conversation.hero.workspace', owner)}
     </>)

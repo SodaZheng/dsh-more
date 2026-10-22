@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
-import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
+import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import {

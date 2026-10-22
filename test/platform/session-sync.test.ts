@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionListState as NativeSessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+type SessionListState = NativeSessionListState & { current: SessionId | undefined; currentAddress?: undefined; subagentsByParent: Record<string, never>; jobsBySession: Record<string, never> }
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { RefreshableSessions, RefreshableWorkspaces } from '../../src/platform/dsh/client/runtime.js'
@@ -40,13 +41,14 @@ function sessionState(ids: SessionId[], current: SessionId | undefined = sourceI
     byId: Object.fromEntries(ids.map((id) => [id, {
       id,
       displayTitle: id,
+      retainedBy: {},
       running: false,
       blank: false,
       updatedAt: 1,
     }])) as SessionListState['byId'],
     current,
     phase: 'ready',
-    subagentsByParent: {},
+    projectionsBySession: {}, subagentsByParent: {},
     jobsBySession: {},
     currentAddress: undefined,
   }
@@ -62,7 +64,7 @@ function workspaceState(sessionIds: SessionId[]): WorkspaceSnapshot {
       createdAt: new Date(0).toISOString(),
       updatedAt: new Date(0).toISOString(),
     }],
-    archivedSessionIds: [],
+    pinnedSessionIds: [], archivedSessionIds: [],
     state: 'idle',
     phase: 'ready',
     error: null,
@@ -119,7 +121,7 @@ describe('incremental client session synchronization', () => {
     const sessions = sessionState([sourceId, archivedId, childId])
     const workspaces = { ...workspaceState([sourceId, archivedId, childId]), archivedSessionIds: [archivedId] }
     expect(adjacentVisibleSession(sessions, workspaces, sourceId)).toBe(childId)
-    expect(adjacentVisibleSession({ ...sessions, current: childId }, workspaces, sourceId)).toBeUndefined()
+    expect(adjacentVisibleSession({ ...sessions, current: childId } as SessionListState, workspaces, sourceId)).toBeUndefined()
   })
 
   it('finds a fallback with one index lookup even at the end of a large list', () => {

@@ -33,7 +33,7 @@ describe('session grouping sidebar', () => {
     expect(result.items[0]).toBe(native.items[0])
     expect(result.items[1]?.sessionIds).toEqual(['source'])
     expect(native.items[1]?.sessionIds).toEqual([])
-    expect(sessions.current).toBe('source')
+    expect((sessions as SessionListState & { current?: string }).current).toBe('source')
     expect(Object.values(sessions.byId).find((item) => item.id === 'source')?.cwd).toBe('/task')
     expect(projectSessionGroups(native, sessions, { assignments: { source: 'deleted-project' } })).toBe(native)
   })

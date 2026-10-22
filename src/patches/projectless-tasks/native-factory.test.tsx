@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// Optional integration check against an installed desktop, not a simulated SlotCore.
-// DSH_MORE_DESKTOP_ASAR=/path/to/app.asar vitest run src/patches/projectless-tasks/native-factory.test.tsx
+// Integration against real SDK modules, not a simulated SlotCore.
+// Override with DSH_MORE_DESKTOP_ASAR=/path/to/app.asar to check an installed Desktop.
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
@@ -14,7 +14,7 @@ import { installConversationAdapter, installConversationFactoryAdapter } from '.
 import { installPickerAdapter } from './client/picker.js'
 
 interface AsarEntry { files?: Record<string, AsarEntry>; link?: string; offset?: string; size?: number }
-function desktopModules(archive: string) {
+function archiveSource(archive: string) {
   const bytes = readFileSync(archive)
   const base = 8 + bytes.readUInt32LE(4)
   const index = JSON.parse(bytes.subarray(16, 16 + bytes.readUInt32LE(12)).toString()) as AsarEntry
@@ -33,6 +33,13 @@ function desktopModules(archive: string) {
     const start = base + Number(entry.offset)
     return bytes.subarray(start, start + entry.size).toString()
   }
+  return source
+}
+
+function desktopModules(archive?: string) {
+  const source = archive === undefined
+    ? (path: string) => readFileSync(new URL('../../../node_modules/' + path.replace('dsh/node_modules/', ''), import.meta.url), 'utf8')
+    : archiveSource(archive)
   const require = createRequire(import.meta.url)
   const coreModule = { exports: {} }
   runInNewContext(transformSync(source('dsh/node_modules/@deepseek-ai/dsh-client-ui-slots/lib/index.js'), { format: 'cjs' }).code,
@@ -77,7 +84,7 @@ function desktopModules(archive: string) {
 }
 
 const archive = process.env['DSH_MORE_DESKTOP_ASAR']
-it.skipIf(archive === undefined)('adapts an already mounted native desktop SlotRegistry and renderer', async () => {
+it('adapts an already mounted native desktop SlotRegistry and renderer', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const ctx = new Context()
   const root = createRoot(document.body.appendChild(document.createElement('div')))
@@ -99,7 +106,7 @@ it.skipIf(archive === undefined)('adapts an already mounted native desktop SlotR
       sessions: observable({ byId: { independent: { cwd: '/tmp/independent-task' } } }),
     } })
     const binding = { key: 'independent', ctx, hooks: { session: observable({ openState: 'open' }) }, keyedHooks: {}, props: { sessionId: 'independent' } }
-    ctx.slots.installScope('session', { current: observable(binding), resolve: () => binding, renderArea: () => null })
+    ctx.slots.installScope('session', { current: observable(binding), resolve: () => binding, renderArea: () => null } as unknown as Parameters<typeof ctx.slots.installScope>[1])
     ctx.slots.register({ name: 'root', children: { 'main.conversation': { kind: 'single', scope: 'session-maybe' } } },
       (props: any) => props.renderSlot('main.conversation', {}))
     // Native 0.1.6 shell owns no composer children: those live in its Factory.
@@ -144,7 +151,7 @@ it.skipIf(archive === undefined)('adapts an already mounted native desktop SlotR
   }
 })
 
-it.skipIf(archive === undefined)('unlocks the real desktop conversation content and shows the independent task', async () => {
+it('unlocks the real desktop conversation content and shows the independent task', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const ctx = new Context()
   const root = createRoot(document.body.appendChild(document.createElement('div')))
@@ -188,6 +195,7 @@ it.skipIf(archive === undefined)('unlocks the real desktop conversation content 
         'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
         'conversation.hero.workspace': { kind: 'single', scope: 'root' },
         'conversation.hero.agentPreset': { kind: 'single', scope: 'session-maybe' },
+        'conversation.hero.options': { kind: 'list', scope: 'session' },
       },
       slots: { views: { scope: 'session' }, widthControls: { scope: 'root' } },
       inject: () => ({ hooks: { composerBlock: observable(undefined) }, selectWorkspace: () => Promise.resolve() }),

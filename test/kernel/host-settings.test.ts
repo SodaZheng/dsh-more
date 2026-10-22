@@ -1,17 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import type { LegacyInstallSection } from '../../src/kernel/host/settings.js'
 import { DEFAULT_PATCH_SETTINGS, type PatchSettings } from '../../src/generated/patch-catalog.js'
 import { HostPatchActivation } from '../../src/kernel/host/activation.js'
 import { installPatchSettings, PatchConfig, PATCH_SETTINGS_NAMESPACE } from '../../src/kernel/host/settings.js'
 
 describe('DSH settings service compatibility', () => {
   it('registers through the current service and applies stored and live switches', () => {
-    expect(typeof SettingsProvider.prototype.installSection).toBe('function')
     const id = 'message-delete'
     let current: PatchSettings = { ...DEFAULT_PATCH_SETTINGS, [id]: false }
     let changed = (): void => undefined
-    const installSection = vi.fn<Context['settings']['installSection']>((_owner, namespace, _schema, _entry, hooks) => {
+    const installSection = vi.fn<LegacyInstallSection>((_owner, namespace, _schema, _entry, hooks) => {
       expect(namespace).toBe(PATCH_SETTINGS_NAMESPACE)
       // The provider supplies the stored value before notifying the owner.
       hooks.setSource(() => current as typeof _entry)

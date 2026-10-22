@@ -6,9 +6,9 @@
     "name": "dsh-more",
     "inject": [
       "webServer",
-      "webRuntime",
       "agents",
       "sessions",
+      "connection",
       "sessionPersistence",
       "sessionProjections",
       "workspaceRegistry",

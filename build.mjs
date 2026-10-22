@@ -1,5 +1,6 @@
 import { readFile, rm } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 await import('./scripts/generate-patch-registry.mjs')
@@ -27,9 +28,19 @@ await new Promise((resolve, reject) => {
 
 await Promise.all([
   build({
+    entryPoints: ['./src/patches/fast-mode/host/settings.ts'],
+    outfile: './dist/fast-mode.js',
+    absWorkingDir: fileURLToPath(root),
+    bundle: true,
+    packages: 'external',
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+  }),
+  build({
     entryPoints: ['./src/patches/projectless-tasks/host/settings.ts'],
     outfile: './dist/session-groups.js',
-    absWorkingDir: root.pathname,
+    absWorkingDir: fileURLToPath(root),
     bundle: true,
     packages: 'external',
     platform: 'node',
@@ -39,7 +50,7 @@ await Promise.all([
   build({
     entryPoints: ['./src/index.ts'],
     outfile: './dist/index.js',
-    absWorkingDir: root.pathname,
+    absWorkingDir: fileURLToPath(root),
     bundle: true,
     packages: 'external',
     platform: 'node',
@@ -49,7 +60,7 @@ await Promise.all([
   build({
     entryPoints: ['./src/client/index.tsx'],
     outfile: './dist/client.js',
-    absWorkingDir: root.pathname,
+    absWorkingDir: fileURLToPath(root),
     bundle: true,
     packages: 'external',
     platform: 'browser',

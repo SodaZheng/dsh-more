@@ -13,24 +13,30 @@ concurrency:
 
 jobs:
   verify:
-    name: Node ${{ matrix.node }}
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         node: [22.19.0, 24.x]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: Enable pnpm
-        run: corepack enable
+      # Corepack is not bundled with every supported Node distribution.
+      - uses: pnpm/action-setup@v4
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify cross-platform scripts
+        run: node --test scripts/platform-regression.mjs
       - name: Typecheck, test, and build
         run: pnpm run check
+      - name: Verify isolated SDK Host
+        if: matrix.node == '24.x'
+        run: pnpm run test:runtime
       - name: Verify package contents
         if: matrix.node == '22.19.0'
         run: pnpm run package:check

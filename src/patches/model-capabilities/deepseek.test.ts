@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { memorySettings } from '../../../test/helpers/settings.js'
+import { readSettings } from '../../platform/dsh/host/settings.js'
 import { LlmAdapter, LlmRuntime, ReasoningEffortId, type GenerateOptions, type LlmCallConfig, type StreamChunk } from '@deepseek-ai/dsh-llm'
-import z from '@deepseek-ai/schemastery'
 import { hostPatch } from './host/index.js'
 import { DEEPSEEK_PROVIDER as PROVIDER, LLM_DEEPSEEK_SETTINGS_NAMESPACE as NS, type ModelCapabilitiesSnapshot } from './shared.js'
 
@@ -18,20 +18,12 @@ const initial = {
 async function fixture(user: unknown = initial, base?: object) {
   const ctx = new Context()
   contexts.push(ctx)
-  let writes = 0
-  let stored: Record<string, unknown> | undefined
-  class MemorySettings extends SettingsProvider {
-    writable = true
-    protected async load() { return { [NS]: structuredClone(user) } }
-    protected async persist(_ns: string, value: Record<string, unknown>) { writes += 1; stored = value }
-  }
-  await ctx.plugin(MemorySettings)
-  ctx.settings.register(NS, z.dict(z.any()), { applies: 'live', ...(base === undefined ? {} : { base }) })
+  const settings = await memorySettings(ctx, NS, user, base === undefined ? {} : { base })
   await ctx.plugin(LlmRuntime)
   const sent: GenerateOptions[] = []
   class Adapter extends LlmAdapter {
     override async resolveModel(provider: string, model: string) {
-      const profile = ctx.settings.get(NS) as typeof initial
+      const profile = readSettings(ctx, NS) as typeof initial
       return {
         provider, id: model, name: model, context: { contextWindow: 9000 },
         inputModalities: ['text' as const],
@@ -50,7 +42,7 @@ async function fixture(user: unknown = initial, base?: object) {
   const read = async () => await routes.read!({}) as ModelCapabilitiesSnapshot
   const save = async (changes: Record<string, unknown> = {}) => routes.save!({ namespace: NS, provider: PROVIDER, modelId: 'first',
     expectedRevision: (await read()).rows[0]?.revision, vision: true, reasoningEfforts: { low: 'low', max: 'max' }, thinkingFormat: null, ...changes })
-  return { ctx, read, save, dispose, sent, writes: () => writes, stored: () => stored }
+  return { ctx, read, save, dispose, sent, ...settings }
 }
 const config: LlmCallConfig = { provider: PROVIDER, model: 'first' }
 async function consume(stream: AsyncIterable<StreamChunk>) { const chunks: StreamChunk[] = []; for await (const chunk of stream) chunks.push(chunk); return chunks }

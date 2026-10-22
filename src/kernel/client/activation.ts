@@ -1,5 +1,5 @@
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsScope } from '../../platform/dsh/client/settings.js'
+import type { SettingsScopeSnapshot } from '../../platform/dsh/client/settings.js'
 import {
   decodePatchSettings,
   DEFAULT_PATCH_SETTINGS,

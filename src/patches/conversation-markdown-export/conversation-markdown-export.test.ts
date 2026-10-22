@@ -75,6 +75,16 @@ describe('conversation Markdown export', () => {
     expect(result.markdown.indexOf('我来运行。')).toBeLessThan(result.markdown.indexOf('工具输出'))
   })
 
+  it('exports alpha tool failure status from the message, not a removed wrapper block', () => {
+    const session = Session.create(SessionId('export-tool-error'))
+    session.append('tool/result', { turn: 1, step: 1, message: createToolResultMessage({
+      callId: ToolCallId('failed-call'), isError: true, content: [{ type: 'text', text: 'permission denied' }],
+    }) }, { surfaceOp: 'append' })
+    const result = conversationMarkdown(session.snapshotEvents(), { title: 'Tool failure', sessionId: session.id })
+    expect(result.markdown).toContain('（失败）')
+    expect(result.markdown).toContain('permission denied')
+  })
+
   it('exports an explicit empty transcript', () => {
     const result = conversationMarkdown([], {
       title: '空会话',

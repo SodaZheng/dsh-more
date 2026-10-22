@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsScopeSnapshot } from '../../src/platform/dsh/client/settings.js'
 import { installPatchConfigCard, PatchConfigCard, type PatchConfigCardProps } from '../../src/kernel/client/config-card.js'
 import type { PatchActivationSource } from '../../src/kernel/client/activation.js'
 import {

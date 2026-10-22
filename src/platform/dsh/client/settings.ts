@@ -1,5 +1,15 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsScope, SettingsScopeSnapshot, SettingsScopeSpec } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm as NativeConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+
+/** Plugin-owned facade: old scopes throw on refusal; native forms return a boolean. */
+export interface SettingsScopeSnapshot<T> extends ConfigFormSnapshot<T> { mode?: 'host' | 'local' }
+export interface SettingsScopeSpec<T> { namespace: string; decode?(value: unknown): T | undefined }
+export interface SettingsScope<T> extends Omit<NativeConfigForm<T>, 'set' | 'unset' | 'mutate'> {
+  getSnapshot(): SettingsScopeSnapshot<T>
+  set(field: string, value: unknown): Promise<void>
+  unset(field: string): Promise<void>
+  mutate(...args: Parameters<NativeConfigForm<T>['mutate']>): Promise<void>
+}
 
 interface ConfigForm extends Omit<SettingsScope<unknown>, 'set' | 'unset' | 'mutate'> {
   set(...args: Parameters<SettingsScope<unknown>['set']>): Promise<boolean>
@@ -15,7 +25,7 @@ function isConfigForm(value: unknown): value is ConfigForm {
 /** Keep feature consumers stable across the settingsScope -> configForms service rename. */
 export function bindSettings<T>(ctx: Context, spec: SettingsScopeSpec<T>): SettingsScope<T> {
   const service: unknown = typeof ctx.get === 'function' ? ctx.get('configForms') : undefined
-  if (typeof service !== 'object' || service === null) return ctx.settingsScope.bind(spec)
+  if (typeof service !== 'object' || service === null) return (ctx as unknown as { settingsScope: { bind(spec: SettingsScopeSpec<T>): SettingsScope<T> } }).settingsScope.bind(spec)
   const get: unknown = Reflect.get(service, 'get')
   const form: unknown = typeof get === 'function' ? get.call(service, spec.namespace) : undefined
   if (!isConfigForm(form)) throw new TypeError('DSH configuration form API is unavailable')

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import z from '@deepseek-ai/schemastery'
+import { memorySettings } from '../../../test/helpers/settings.js'
+import { readSettings } from '../../platform/dsh/host/settings.js'
 import { hostPatch } from './host/index.js'
 import { validateCapabilities, validateReasoningEfforts } from './host/validate.js'
 import { LLM_PI_AI_SETTINGS_NAMESPACE as NS, THINKING_FORMATS, type ModelCapabilitiesSnapshot } from './shared.js'
@@ -24,24 +24,16 @@ const SAMPLE = {
 }
 
 async function fixture(user: unknown = SAMPLE, options: { base?: Record<string, unknown>; writable?: boolean; register?: boolean } = {}) {
-  let persisted: Record<string, unknown> | undefined
-  let writes = 0
-  class MemorySettings extends SettingsProvider {
-    readonly writable = options.writable ?? true
-    protected async load() { return user === undefined ? {} : { [NS]: structuredClone(user) } }
-    protected async persist(_ns: string, section: Record<string, unknown>) { persisted = section; writes += 1 }
-  }
   const ctx = new Context()
   contexts.push(ctx)
-  await ctx.plugin(MemorySettings)
-  if (options.register !== false) ctx.settings.register(NS, z.dict(z.any()), { ...(options.base === undefined ? {} : { base: options.base }), applies: 'live' })
+  const settings = await memorySettings(ctx, NS, user, options)
   const routes = hostPatch.routes({ ctx, confirmationSecret: new Uint8Array(0) })
   const read = async () => await routes.read!({}) as ModelCapabilitiesSnapshot
   const save = async (overrides: Record<string, unknown> = {}) => routes.save!({
     namespace: NS, provider: 'gateway', modelId: 'unknown', expectedRevision: (await read()).revision,
     vision: null, reasoningEfforts: null, thinkingFormat: null, ...overrides,
   })
-  return { ctx, routes, read, save, stored: () => persisted, writes: () => writes }
+  return { ctx, routes, read, save, ...settings }
 }
 
 function storedModels(value: unknown): Array<Record<string, unknown>> {
@@ -94,7 +86,7 @@ describe('model capabilities in the real DSH Settings service', () => {
     expect(storedModels(runtime.stored())[0]).toEqual(SAMPLE.providers.gateway.models[0])
     expect(runtime.stored()).toEqual({ providers: { gateway: { models: [SAMPLE.providers.gateway.models[0],
       { id: 'unknown', contextWindow: 2000, input: ['text', 'image'] }, SAMPLE.providers.gateway.models[2]] } } })
-    expect((runtime.ctx.settings.get(NS) as typeof SAMPLE).providers.gateway.baseURL).toBe(SAMPLE.providers.gateway.baseURL)
+    expect((readSettings(runtime.ctx, NS) as typeof SAMPLE).providers.gateway.baseURL).toBe(SAMPLE.providers.gateway.baseURL)
   })
 
   it('rejects stale drafts and concurrent writes without losing the successful update', async () => {
