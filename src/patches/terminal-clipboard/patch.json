@@ -1,0 +1,12 @@
+{
+  "id": "terminal-clipboard",
+  "name": "终端复制粘贴",
+  "description": "右侧终端选中自动复制、右键粘贴，支持 Ctrl+Shift+C/V 和 Shift+Insert；无选区时保留 Ctrl+C 中断",
+  "defaultEnabled": true,
+  "order": 800,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.ts"
+  }
+}
