@@ -2,6 +2,14 @@ import { resolveTerminal, type TerminalHandle } from './terminal.js'
 
 type Resolve = (root: HTMLElement) => TerminalHandle | undefined
 
+function pasteText(term: TerminalHandle, text: string): void {
+  // Remove SGR styling and OSC palette/dynamic color commands, including C1 forms.
+  const plain = text
+    .replace(/(?:\x1b\[|\x9b)[\d:;]*m/g, '')
+    .replace(/(?:\x1b\]|\x9d)(?:[45]|1\d|10[45]|11\d)(?:;[^\x00-\x1f\x7f-\x9f]*)?(?:\x07|\x1b\\|\x9c)/g, '')
+  if (plain) term.paste(plain) // xterm handles newline normalization and bracketed paste.
+}
+
 /** Delegation handles terminal tabs/remounts without a global MutationObserver. */
 export function installTerminalClipboard(doc: Document, resolve: Resolve = resolveTerminal): () => void {
   let active = true
@@ -10,6 +18,7 @@ export function installTerminalClipboard(doc: Document, resolve: Resolve = resol
   let notice: HTMLElement | undefined
   let noticeTimer: ReturnType<typeof setTimeout> | undefined
   const clipboard = doc.defaultView?.navigator.clipboard
+  const macShortcuts = /^(Mac|iPhone|iPad|iPod)/.test(doc.defaultView?.navigator.platform ?? '')
   const rootAt = (target: EventTarget | null): HTMLElement | undefined => {
     if (!(target instanceof Element)) return
     return target.closest<HTMLElement>('.xterm') ?? undefined
@@ -43,10 +52,18 @@ export function installTerminalClipboard(doc: Document, resolve: Resolve = resol
       // Do not send a delayed clipboard result into a closed/replaced/blurred terminal.
       if (!active || revision !== pasteRevision || !root.isConnected || resolve(root) !== term
         || term.options.disableStdin || !root.contains(doc.activeElement)) return
-      if (text) term.paste(text) // Preserve xterm's newline normalization and bracketed paste.
+      pasteText(term, text)
     } catch { report('粘贴') }
   }
   const consume = (event: Event): void => { event.preventDefault(); event.stopImmediatePropagation() }
+  const nativePaste = (event: ClipboardEvent): void => {
+    const root = rootAt(event.target)
+    const term = root && resolve(root)
+    if (!term || term.options.disableStdin || !event.clipboardData) return
+    consume(event)
+    pasteRevision++
+    pasteText(term, event.clipboardData.getData('text/plain'))
+  }
   const contextmenu = (event: MouseEvent): void => {
     if (event.shiftKey) return // Explicit escape hatch to the browser's native menu.
     const root = rootAt(event.target)
@@ -64,18 +81,21 @@ export function installTerminalClipboard(doc: Document, resolve: Resolve = resol
     if (key === 'c' && (event.ctrlKey || event.metaKey)) {
       const selection = term.getSelection()
       if (!selection) return // In particular, Ctrl+C still sends SIGINT.
-      // Native Cmd+C / Ctrl+C copy events already understand xterm selections.
-      // Handle Ctrl+C explicitly so selected text never sends SIGINT.
+      // Cmd+C already copies the native xterm selection.
       if (event.metaKey && !event.ctrlKey) return
       consume(event)
       if (!event.repeat) void copy(selection)
-    } else if ((key === 'v' && event.ctrlKey && event.shiftKey && !event.metaKey)
+    } else if ((key === 'v' && event.ctrlKey && !event.metaKey)
       || (key === 'insert' && event.shiftKey && !event.ctrlKey && !event.metaKey)) {
       if (term.options.disableStdin) return
+      if (key === 'v' && !event.shiftKey && !macShortcuts && !event.repeat) {
+        // Let the browser trigger paste without read permission or xterm receiving ^V.
+        event.stopImmediatePropagation()
+        return
+      }
       consume(event)
       if (!event.repeat) void paste(root, term)
     }
-    // Cmd+V and Ctrl+V keep the trusted native paste path (no read permission needed).
   }
   const mousedown = (event: MouseEvent): void => {
     gesture = undefined
@@ -97,6 +117,7 @@ export function installTerminalClipboard(doc: Document, resolve: Resolve = resol
   }
   const blur = (): void => { gesture = undefined; pasteRevision++ }
   doc.addEventListener('contextmenu', contextmenu, true)
+  doc.addEventListener('paste', nativePaste, true)
   doc.addEventListener('keydown', keydown, true)
   doc.addEventListener('mousedown', mousedown, true)
   doc.addEventListener('mouseup', mouseup, true)
@@ -105,6 +126,7 @@ export function installTerminalClipboard(doc: Document, resolve: Resolve = resol
     active = false
     blur()
     doc.removeEventListener('contextmenu', contextmenu, true)
+    doc.removeEventListener('paste', nativePaste, true)
     doc.removeEventListener('keydown', keydown, true)
     doc.removeEventListener('mousedown', mousedown, true)
     doc.removeEventListener('mouseup', mouseup, true)

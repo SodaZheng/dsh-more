@@ -44,6 +44,13 @@ function key(target: Element, key: string, init: KeyboardEventInit = {}) {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
   target.dispatchEvent(event); return event
 }
+function nativePaste(target: Element, text: string) {
+  const data = new DataTransfer()
+  data.setData('text/html', '<span style="color:red">rich text</span>')
+  data.setData('text/plain', text)
+  const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data })
+  target.dispatchEvent(event); return event
+}
 async function flush() { await Promise.resolve(); await Promise.resolve() }
 
 describe('native terminal adapter', () => {
@@ -98,12 +105,13 @@ describe('terminal clipboard interactions', () => {
     mouse(root, 'mousedown'); mouse(root, 'mouseup'); await flush()
     expect(writeText).toHaveBeenCalledTimes(1)
   })
-  it('right-click pastes exactly once through xterm and preserves all text', async () => {
+  it('right-click strips color escapes and preserves literal colors, tabs and newlines', async () => {
     const { root, term } = fixture(); start()
+    readText.mockResolvedValue('\x1b[38;2;1;2;3m中文\x1b[0m\t#ff0000\r\n\x9b48:5:123m第二行\x9bm')
     const nativeMenu = vi.fn(); root.addEventListener('contextmenu', nativeMenu)
     expect(mouse(root, 'contextmenu', { button: 2 }).defaultPrevented).toBe(true)
     await flush()
-    expect(term.paste).toHaveBeenCalledExactlyOnceWith('echo hello\r\n')
+    expect(term.paste).toHaveBeenCalledExactlyOnceWith('中文\t#ff0000\r\n第二行')
     expect(nativeMenu).not.toHaveBeenCalled()
   })
   it('preserves Shift+right-click, read-only terminals, and unrelated UI', async () => {
@@ -120,19 +128,65 @@ describe('terminal clipboard interactions', () => {
     vi.mocked(term.getSelection).mockReturnValue('selected')
     expect(key(textarea, 'c', { ctrlKey: true }).defaultPrevented).toBe(true)
     expect(key(textarea, 'C', { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true)
-    await flush(); expect(writeText).toHaveBeenCalledTimes(2)
+    await flush(); expect(writeText.mock.calls).toEqual([['selected'], ['selected']])
   })
-  it('supports Ctrl+Shift+V and Shift+Insert without intercepting native shortcuts or IME', async () => {
+  it.each(['Win32', 'Linux x86_64'])('lets Ctrl+V trigger a plain-text native paste on %s', (platform) => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform)
     const { textarea, term } = fixture(); start()
+    const xtermKey = vi.fn(); textarea.addEventListener('keydown', xtermKey)
+    const xtermPaste = vi.fn(); textarea.addEventListener('paste', xtermPaste)
+    expect(key(textarea, 'v', { ctrlKey: true }).defaultPrevented).toBe(false)
+    expect(xtermKey).not.toHaveBeenCalled()
+    expect(nativePaste(textarea, '\x1b[31mred\x1b[0m').defaultPrevented).toBe(true)
+    expect(xtermPaste).not.toHaveBeenCalled()
+    expect(term.paste).toHaveBeenCalledExactlyOnceWith('red')
+    expect(readText).not.toHaveBeenCalled()
+  })
+  it('reads the clipboard for macOS Ctrl+V, Ctrl+Shift+V and Shift+Insert', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    const { textarea, term } = fixture(); start()
+    readText.mockResolvedValue('\x1b[38;5;202mecho hello\x1b[m')
+    expect(key(textarea, 'v', { ctrlKey: true }).defaultPrevented).toBe(true)
+    expect(key(textarea, 'v', { ctrlKey: true, repeat: true }).defaultPrevented).toBe(true)
+    await flush()
     expect(key(textarea, 'V', { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true)
     await flush()
     expect(key(textarea, 'Insert', { shiftKey: true }).defaultPrevented).toBe(true)
     await flush()
-    for (const init of [{ metaKey: true }, { ctrlKey: true }, { ctrlKey: true, shiftKey: true, isComposing: true }]) {
+    for (const init of [{ metaKey: true }, { ctrlKey: true, altKey: true }, { ctrlKey: true, isComposing: true }]) {
       expect(key(textarea, 'v', init).defaultPrevented).toBe(false)
     }
     expect(key(textarea, 'c', { metaKey: true }).defaultPrevented).toBe(false)
-    expect(term.paste).toHaveBeenCalledTimes(2)
+    expect(term.paste).toHaveBeenCalledTimes(3)
+    expect(term.paste).toHaveBeenCalledWith('echo hello')
+    expect(readText).toHaveBeenCalledTimes(3)
+  })
+  it('drops OSC colors and empty pastes without changing other text or controls', () => {
+    const { textarea, term } = fixture(); start()
+    nativePaste(textarea, '\x1b]11;rgb:11/22/33\x1b\\\x9d4;1;#fff\x9c\x1b]112\x07\x1b[0m')
+    expect(term.paste).not.toHaveBeenCalled()
+    const literal = 'printf "\\e[31m"\n\x1b[2Krgb(1, 2, 3)'
+    nativePaste(textarea, '\x1b]10;#fff\x07' + literal)
+    expect(term.paste).toHaveBeenCalledExactlyOnceWith(literal)
+  })
+  it('leaves native paste alone outside the writable terminal and after disposal', () => {
+    const { textarea, term } = fixture(); start()
+    expect(nativePaste(document.body, 'outside').defaultPrevented).toBe(false)
+    term.options.disableStdin = true
+    expect(nativePaste(textarea, 'readonly').defaultPrevented).toBe(false)
+    term.options.disableStdin = false
+    disposers.pop()?.()
+    expect(nativePaste(textarea, 'disabled').defaultPrevented).toBe(false)
+    expect(term.paste).not.toHaveBeenCalled()
+  })
+  it('supersedes a pending clipboard read with a newer native paste', async () => {
+    const { root, textarea, term } = fixture(); start()
+    let finish!: (text: string) => void
+    readText.mockReturnValue(new Promise<string>((resolve) => { finish = resolve }))
+    mouse(root, 'contextmenu')
+    nativePaste(textarea, 'new')
+    finish('old'); await flush()
+    expect(term.paste).toHaveBeenCalledExactlyOnceWith('new')
   })
   it.each(['dispose', 'detach', 'blur', 'readonly', 'replace'])('drops asynchronous paste after %s', async (change) => {
     const { root, term } = fixture(); start()

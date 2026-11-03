@@ -1,0 +1,12 @@
+{
+  "id": "terminal-host-stats",
+  "name": "终端主机状态",
+  "description": "在右侧终端顶部显示主机 CPU、内存、磁盘可用空间和实时读写速率",
+  "defaultEnabled": true,
+  "order": 810,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.ts"
+  }
+}
