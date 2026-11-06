@@ -1,0 +1,12 @@
+{
+  "id": "next-step-suggestion",
+  "name": "下一步输入建议",
+  "description": "回复结束后用当前模型生成下一步建议，显示在空输入框中；按 Tab 填入并编辑，按 Enter 发送。生成建议会使用少量模型额度",
+  "defaultEnabled": true,
+  "order": 620,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.tsx"
+  }
+}
