@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, createElement, useLayoutEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { installTerminalClipboard } from './client/clipboard.js'
-import { resolveTerminal, type TerminalHandle } from './client/terminal.js'
+import { resolveTerminal, type TerminalHandle } from '../../platform/dsh/client/terminal.js'
 import { clientPatch } from './client/index.js'
 import { DEFAULT_PATCH_SETTINGS } from '../../generated/patch-catalog.js'
 

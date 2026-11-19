@@ -1,0 +1,9 @@
+{
+  "id": "terminal-control",
+  "name": "对话控制终端",
+  "description": "允许当前对话操作已打开的右侧终端，可逐条确认命令或授予完全控制",
+  "defaultEnabled": true,
+  "order": 820,
+  "host": "./host/index.ts",
+  "client": { "kind": "standalone", "entry": "./client/index.ts" }
+}

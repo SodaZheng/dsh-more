@@ -1,4 +1,4 @@
-import { resolveTerminal, type TerminalHandle } from './terminal.js'
+import { resolveTerminal, type TerminalHandle } from '../../../platform/dsh/client/terminal.js'
 
 type Resolve = (root: HTMLElement) => TerminalHandle | undefined
 
