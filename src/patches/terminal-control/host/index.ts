@@ -26,7 +26,7 @@ function register(agent: Agent, channel: Channel): () => void {
     parameters: { type: 'object', additionalProperties: false, required: ['target', 'action'], properties: {
       target: { type: 'string', enum: [channel.target], description: 'Current terminal connection.' },
       action: { type: 'string', enum: full ? ['read', 'run', 'input'] : ['read', 'run'] },
-      text: { type: 'string', description: 'Required for run and input only.' },
+      text: { type: 'string', description: 'For read, omit text or pass "". For run and input, supply non-empty text.' },
     } },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] },
     async execute(args, exec) {

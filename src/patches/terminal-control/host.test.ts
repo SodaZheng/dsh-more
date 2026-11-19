@@ -9,6 +9,16 @@ const signal = new AbortController().signal
 afterEach(() => vi.useRealTimers())
 
 describe('sidebar terminal channel', () => {
+  it.each(['restricted', 'full'] as const)('normalizes empty read text without permitting empty writes in %s mode', mode => {
+    for (const args of [{ action: 'read' }, { action: 'read', text: '' }]) {
+      expect(operation(args, mode)).toEqual({ action: 'read' })
+    }
+    expect(() => operation({ action: 'read', text: 'pwd' }, mode)).toThrow()
+    for (const action of ['run', 'input']) {
+      expect(() => operation({ action, text: '' }, mode)).toThrow()
+    }
+  })
+
   it('delivers once, checks claim order and drops duplicate or mismatched replies', async () => {
     vi.useFakeTimers()
     const ch = new Channel('full', vi.fn())
