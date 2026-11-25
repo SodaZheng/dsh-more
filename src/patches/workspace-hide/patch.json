@@ -1,0 +1,12 @@
+{
+  "id": "workspace-hide",
+  "name": "隐藏工作区",
+  "description": "在左侧目录隐藏工作区而不删除记录，重新添加该目录或手动恢复时找回全部会话与分组",
+  "defaultEnabled": true,
+  "order": 710,
+  "host": "./host/index.ts",
+  "client": {
+    "kind": "standalone",
+    "entry": "./client/index.tsx"
+  }
+}

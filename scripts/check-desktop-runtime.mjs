@@ -188,7 +188,8 @@ async function checkDesktop() {
       assert.match(title.system, /类型 · 具体任务/)
       assert.ok(title.maxTokens >= 2048)
       await checkFastMode(ctx, call, edited.sessionId)
-      log(`${sdk ? 'SDK Host' : 'Desktop'} ${version}: export, edit/resume, delete/rebuild, grouping persistence, permanent deletion, capabilities save/conflict, title middleware and Fast settings/wire/toggles passed.`)
+      await checkWorkspaceHide(ctx, call, workspace.id, workspacePath)
+      log(`${sdk ? 'SDK Host' : 'Desktop'} ${version}: export, edit/resume, delete/rebuild, grouping persistence, workspace hide/restore, permanent deletion, capabilities save/conflict, title middleware and Fast settings/wire/toggles passed.`)
     } finally {
       try { await ctx?.fiber.dispose() } finally { console.log = log }
     }
@@ -247,4 +248,21 @@ async function checkFastMode(ctx, call, sessionId) {
     server.closeAllConnections()
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
   }
+}
+
+async function checkWorkspaceHide(ctx, call, workspaceId, workspacePath) {
+  const { sessionId } = await ctx.sessionController.create({ workspaceId })
+  await call('workspace-hide', 'hide', { workspaceId })
+  assert.equal(ctx.settings.describe().find((entry) => entry.ns === 'dsh-more/workspace-hide')?.value.hidden[workspaceId], true)
+  assert.equal(ctx.workspaceRegistry.get(workspaceId)?.sessionIds.includes(sessionId), true)
+  const resolved = await ctx.workspaceRegistry.resolveByPath(workspacePath)
+  assert.equal(resolved?.id, workspaceId)
+  assert.equal(ctx.settings.describe().find((entry) => entry.ns === 'dsh-more/workspace-hide')?.value.hidden[workspaceId], undefined)
+  assert.equal(resolved?.sessionIds.includes(sessionId), true)
+  await call('workspace-hide', 'hide', { workspaceId })
+  await call('workspace-hide', 'unhide', { workspaceId })
+  assert.equal(ctx.settings.describe().find((entry) => entry.ns === 'dsh-more/workspace-hide')?.value.hidden[workspaceId], undefined)
+  await ctx.settings.mutate('dsh-more', [{ op: 'set', path: ['workspace-hide'], value: false }])
+  await call('workspace-hide', 'hide', { workspaceId }, 409)
+  await ctx.settings.mutate('dsh-more', [{ op: 'set', path: ['workspace-hide'], value: true }])
 }

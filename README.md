@@ -20,6 +20,7 @@ Practical, independently switchable patches for missing context and history cont
 | Markdown export | Conversation toolbar / More menu | Export messages and tool results with Windows-safe download filenames | On |
 | Automatic titles | After the first request | Generate a title using the current model, preserving manual names | On |
 | Independent tasks and grouping | Workspace picker / session menu | Create an independent task with its draft intact; group sessions without changing their working directories | On |
+| Hide workspaces | Workspace `…` menu / View options | Hide a workspace from the sidebar without deleting its record; restore all conversations and grouping when re-adding the folder or restoring manually | On |
 
 Patch switches live under **Settings → Plugins → Plugin configuration → DSH More** and take effect without rebuilding the plugin.
 
@@ -148,6 +149,15 @@ Open a session row's overflow menu and choose the separate **Permanently delete 
 After confirmation, DSH More cancels a running task, waits for idle, flushes the session, unloads its Agent/Session handles, removes the exact persistence directory returned by DSH, and detaches the session from its workspaces. The UI follows DSH incremental events first and refreshes the lists only when those events are missing. Deleting the current session selects an adjacent visible session first so the conversation area does not pass through a blank state.
 
 > **Irreversible:** permanent deletion does not archive the session and does not move it into a DSH More trash directory.
+
+### Hide workspaces
+
+Open a workspace row's `…` menu and choose **Hide workspace**. Native **Delete workspace** remains unchanged.
+
+Hiding preserves the workspace record along with all of its sessions, custom title, and browser-local session order while hiding the workspace and its sessions from the sidebar, search, and workspace picker without spilling sessions into **Ungrouped**. If the currently open session belongs to the hidden workspace, the view switches to an adjacent visible session (or clears the selection if none remain). You can restore a hidden workspace at any time by either:
+
+- Re-adding the same directory via **Add workspace** (automatically restores the original workspace and all of its conversations);
+- Opening **Hidden workspaces (N)…** in the sidebar **View options** menu to restore individual workspaces or click **Restore all**.
 
 ### Configure model capabilities
 

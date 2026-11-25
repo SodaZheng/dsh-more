@@ -48,6 +48,16 @@ await Promise.all([
     target: 'node22',
   }),
   build({
+    entryPoints: ['./src/patches/workspace-hide/host/settings.ts'],
+    outfile: './dist/workspace-hide.js',
+    absWorkingDir: fileURLToPath(root),
+    bundle: true,
+    packages: 'external',
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+  }),
+  build({
     entryPoints: ['./src/index.ts'],
     outfile: './dist/index.js',
     absWorkingDir: fileURLToPath(root),

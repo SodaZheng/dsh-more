@@ -45,6 +45,10 @@
     "./fast-mode": {
       "types": "./dist/types/patches/fast-mode/host/settings.d.ts",
       "default": "./dist/fast-mode.js"
+    },
+    "./workspace-hide": {
+      "types": "./dist/types/patches/workspace-hide/host/settings.d.ts",
+      "default": "./dist/workspace-hide.js"
     }
   },
   "files": [
